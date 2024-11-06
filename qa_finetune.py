@@ -21,9 +21,9 @@ QA_VAL_PATH = os.path.join("data", "qa_val.bin")
 
 # Training parameters
 BATCH_SIZE = 4  # QA data is smaller, thus the model might benefit from smaller batches
-EVAL_INTERVAL = 50
+EVAL_INTERVAL = 25
 EVAL_ITERS = 200
-MAX_ITERS = 3000
+MAX_ITERS = 5000
 
 
 def load_qa_data():

@@ -14,13 +14,13 @@ from gpt import GPT
 from data.data_load import encode, decode
 
 # Training parameters
-EVAL_INTERVAL = 50  # Number of iterations until validation
+EVAL_INTERVAL = 25  # Number of iterations until validation
 VALIDATION_SAMPLE_SIZE = 100  # Number of batches for validation
-MAX_ITERS = 5000  # Total number of iterations
+MAX_ITERS = 10000  # Total number of iterations
 BATCH_SIZE = 8
-LEARNING_RATE = 3e-4
-WEIGHT_DECAY = 1e-1
-BETA1, BETA2 = 0.9, 0.95
+LEARNING_RATE = 2e-4
+WEIGHT_DECAY = 0.01
+BETA1, BETA2 = 0.9, 0.98
 GRAD_CLIP = 1.0
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 DTYPE = 'float16' if torch.cuda.is_available() else 'float32'
