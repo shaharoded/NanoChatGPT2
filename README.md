@@ -69,7 +69,9 @@ The final stage of training a conversational bot like this typically involves Re
 Currently, due to limitations in resources and time (lack of tagged responses and a reinforcement mechanism for feedback), this step is not implemented. However, feel free to extend the project and experiment with RLHF.
 
 ### 5. Try Your Model
-This project also offers a `playground.py` module that allows you to insert free prompts to a trained model of your choice (from `out` repository, generated after training at least 1 model). In order to start:
+This project also offers a `playground.py` module that allows you to insert free prompts to a trained model of your choice (from `out` repository, generated after training at least 1 model). This module is added with functionality to collect user's feedback which might later be used to fine-tune the model based on RLHF.
+
+In order to start:
 
 ```bash
 python playground.py

@@ -1,5 +1,6 @@
 import torch
 import os
+import json
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.*weights_only=False.*")
@@ -62,12 +63,55 @@ def generate_response(model, prompt):
 if __name__ == "__main__":
     print("Oi, I'm listenin'. Ask your bloody question, or type 'quit' to sod off.")
     
+    output_dir = os.path.join("data", f"{model_name}_feedback_data")
+    feedback_file = os.path.join(output_dir, "feedback_data.json")
+
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Load existing feedback if the file already exists
+    feedback_data = []
+    if os.path.exists(feedback_file):
+        with open(feedback_file, "r") as f:
+            feedback_data = json.load(f)
+
     while True:
         prompt = input("What the f*** do you want? ")
-        
+
         if prompt.lower() in ['quit', 'exit', 'leave']:
             print("Alright, off ya go then. Bugger off.")
             break
         else:
-            print(generate_response(model, prompt))
+            # Generate response from model
+            response = generate_response(model, prompt)
+            print(f"Model's Response: {response}")
+
+            # Ask the user for a rating and additional feedback
+            try:
+                rating = int(input("Rate the response from 1 (absolute sh**e) to 5 (brilliant): "))
+                if rating < 1 or rating > 5:
+                    raise ValueError("Oi, follow instructions! Enter a bloody number between 1 and 5.")
+                if rating < 3:
+                    print("You annoying wanker... I know it ain't perfect, but cut me some slack, yeah?")
+            except ValueError:
+                continue
+
+            additional_feedback = input("Any other thoughts? (Press Enter to skip): ")
+
+            # Collect feedback
+            feedback = {
+                "prompt": prompt,
+                "response": response,
+                "rating": rating,
+                "additional_feedback": additional_feedback
+            }
+
+            # Append feedback to list
+            feedback_data.append(feedback)
+
+            # Save feedback data to JSON file
+            with open(feedback_file, "w") as f:
+                json.dump(feedback_data, f, indent=4)
+            
+            print('\nOK. Next!')
         

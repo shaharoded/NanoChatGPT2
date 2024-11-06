@@ -10,3 +10,10 @@ data/qa_val.bin
 venv/
 out/
 __pycache__/
+data/very_small_for_test_feedback_data/
+data/nanoGPT_feedback_data/
+data/miniGPT_feedback_data/
+data/GPT2-Small_feedback_data/
+data/GPT2-Medium_feedback_data/
+data/GPT2-Large_feedback_data/
+data/GPT2-XL_feedback_data/
