@@ -26,7 +26,6 @@ A first step would be to load, tokenize and encode the data. In the `data\data_c
 ```bash
 cd data
 python data_load.py
-cd ..
 ```
 This code will prompt you to choose a base text to train on. The size of the text matters to the number of needed iterations and model complexity.
 In order to later train the model to QA, opensource QA datasource was found and preprocessed here as well.
