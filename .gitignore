@@ -1,0 +1,12 @@
+# Ignore specific files
+data/pretrain_input.txt
+data/pretrain_train.bin
+data/pretrain_val.bin
+data/qa_input.json
+data/qa_train.bin
+data/qa_val.bin
+
+# Ignore an entire folder
+venv/
+out/
+__pycache__/

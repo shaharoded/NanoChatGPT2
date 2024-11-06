@@ -1,0 +1,14 @@
+{
+  "train_corpora": {
+    "tiny_shakespeare": "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt",
+    "sherlock_holmes": "https://www.gutenberg.org/files/1661/1661-0.txt",
+    "pride_and_prejudice": "https://www.gutenberg.org/cache/epub/1342/pg1342.txt",
+    "dracula": "https://www.gutenberg.org/files/345/345-0.txt",
+    "moby_dick": "https://www.gutenberg.org/files/2701/2701-0.txt",
+    "norvig_big_text": "http://norvig.com/big.txt",
+    "OpenSubtitles2018": "https://object.pouta.csc.fi/OPUS-Tatoeba/v2023-04-12/mono/en.txt.gz"
+  },
+  "qa_data":{
+    "squad_v2": "https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v2.0.json"
+  }
+}

@@ -1,0 +1,6 @@
+requests
+pandas
+tiktoken
+torch
+transformers
+

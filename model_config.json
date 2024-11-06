@@ -1,0 +1,65 @@
+{
+  "very_small_for_test": {
+      "block_size": 8,
+      "vocab_size": 50257,
+      "n_layer": 2,
+      "n_head": 2,
+      "n_embd": 32,
+      "dropout": 0.0,
+      "bias": true
+    },  
+  "nanoGPT": {
+      "block_size": 64,
+      "vocab_size": 50257,
+      "n_layer": 6,
+      "n_head": 6,
+      "n_embd": 384,
+      "dropout": 0.2,
+      "bias": true
+    },
+    "miniGPT": {
+      "block_size": 128,
+      "vocab_size": 50257,
+      "n_layer": 12,
+      "n_head": 8,
+      "n_embd": 512,
+      "dropout": 0.2,
+      "bias": true
+    },
+    "GPT2-Small": {
+      "block_size": 1024,
+      "vocab_size": 50257,
+      "n_layer": 12,
+      "n_head": 12,
+      "n_embd": 768,
+      "dropout": 0.2,
+      "bias": true
+    },
+    "GPT2-Medium": {
+      "block_size": 1024,
+      "vocab_size": 50257,
+      "n_layer": 24,
+      "n_head": 16,
+      "n_embd": 1024,
+      "dropout": 0.2,
+      "bias": true
+    },
+    "GPT2-Large": {
+      "block_size": 1024,
+      "vocab_size": 50257,
+      "n_layer": 36,
+      "n_head": 20,
+      "n_embd": 1280,
+      "dropout": 0.2,
+      "bias": true
+    },
+    "GPT2-XL": {
+      "block_size": 1024,
+      "vocab_size": 50257,
+      "n_layer": 48,
+      "n_head": 25,
+      "n_embd": 1600,
+      "dropout": 0.2,
+      "bias": true
+    }
+  }
