@@ -104,8 +104,8 @@ def preprocess_qa_data(data_str):
                 question = qa['question']
                 for answer in qa['answers']:
                     answer_text = answer['text']
-                    # Format: "Q: [question] A: [answer] <|endoftext|>"
-                    qa_pair = f"Q: {question} A: {answer_text}"
+                    # Format: "[question] [answer] <|endoftext|>"
+                    qa_pair = f"{question} {answer_text}"
                     encoded_qa_pair = encode(qa_pair, end_token=True)
                     qa_pairs.append(encoded_qa_pair)
     return qa_pairs

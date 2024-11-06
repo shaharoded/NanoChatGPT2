@@ -49,9 +49,9 @@ The base GPT model is an nn.Module model structured in the file `gpt.py`. After 
 Using this process will create `out\{model_name}` directories with the model's best checkpoint. The best model will be saved under the name `{model_name}_base_model.pt`. This model will then be loaded to generate text as a POC.
 Use the following to run (mind the user prompts):
 
-    ```bash
-    python pretrain.py
-    ```
+```bash
+python pretrain.py
+```
 NOTE: This module defines `torch.manual_seed(1337)` meaning every random process is the consistent. This also causes the trained model to generate the same responses to re-used test cases, which might contradict the expectation for somewhat randomness in the response.
 
 ### 3. Finetune the Base Model to QA
@@ -60,14 +60,21 @@ After the train is concluded, the model will generate response to a few hardcode
 
 Use the following to run (mind the user prompts):
 
-    ```bash
-    python qa_finetune.py
-    ```
+```bash
+python qa_finetune.py
+```
 
 ### 4. Reinforcement Learning from Human Feedback (RLHF)
 The final stage of training a conversational bot like this typically involves Reinforcement Learning from Human Feedback (RLHF). This stage helps align the model's behavior with human preferences, such as being more helpful, accurate, or less biased.
 
 Currently, due to limitations in resources and time (lack of tagged responses and a reinforcement mechanism for feedback), this step is not implemented. However, feel free to extend the project and experiment with RLHF.
+
+### 5. Try Your Model
+This project also offers a `playground.py` module that allows you to insert free prompts to a trained model of your choice (from `out` repository, generated after training at least 1 model). In order to start:
+
+```bash
+python playground.py
+```
 
 ## GitHub Push Actions
 To commit and push all changes to the repository follow these steps:

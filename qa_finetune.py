@@ -7,8 +7,7 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.*weights_only=False.*")
 
 # Local code
-from gpt import GPT
-from data.data_load import encode, decode
+from data.data_load import encode
 from pretrain import (
     BETA1, BETA2, DEVICE, WEIGHT_DECAY, LEARNING_RATE, DEVICE_TYPE, GRAD_CLIP,
     load_configurations, get_model_choice, initialize_model, get_batch
