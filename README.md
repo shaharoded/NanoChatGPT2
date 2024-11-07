@@ -63,7 +63,7 @@ NOTE: This module defines `torch.manual_seed(1337)` meaning every random process
 ### 3. Finetune the Base Model to QA
 As described in step #1, we already loaded QA data for the finetune part. Now, this module focuses on taking this data and train the base model to the task of an assistant. activate
 After the train is concluded, the model will generate response to a few hardcoded questions.
-Finetuning the nanoGPT model with QA data of ~88MB on the current train configurations took about 8 hours as well (CPU).
+Finetuning the nanoGPT model with QA data of ~88MB on the current train configurations took about 4.5 hours (CPU).
 
 Use the following to run (mind the user prompts):
 
