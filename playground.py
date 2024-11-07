@@ -8,7 +8,7 @@ warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.
 # Local code
 from data.data_load import encode
 from pretrain import (
-    BETA1, BETA2, DEVICE, WEIGHT_DECAY, LEARNING_RATE, DEVICE_TYPE,
+    DEVICE,
     load_configurations, get_model_choice, initialize_model
 )
 
@@ -36,7 +36,6 @@ model_name, model_config = get_model_choice(configs)  # This returns model_name 
 # Initialize model (overrun OUT_DIR with relevant OUT_DIR)
 model, OUT_DIR = initialize_model(model_config, model_name)
 model_path = os.path.join(OUT_DIR, f'{model_name}_fine_tuned.pt')
-optimizer = model.configure_optimizers(WEIGHT_DECAY, LEARNING_RATE, (BETA1, BETA2), DEVICE_TYPE)
 
 checkpoint = torch.load(model_path, map_location=DEVICE)
 model.load_state_dict(checkpoint)
@@ -58,7 +57,7 @@ def generate_response(model, prompt):
     # Remove the prompt from the generated response
     if answer.startswith(prompt):
         answer = answer[len(prompt):].strip()
-    return f"Model's Response: {answer}"
+    return answer
 
 if __name__ == "__main__":
     print("Oi, I'm listenin'. Ask your bloody question, or type 'quit' to sod off.")
