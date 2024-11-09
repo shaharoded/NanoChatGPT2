@@ -90,24 +90,48 @@ def download_data(url, output_file_name):
         raise ValueError(f'Unrecognized file type found, the original file downloaded is: {original_file_name}')
     
 # Function to preprocess Q&A data
-def preprocess_qa_data(data_str):
+def preprocess_qa_data(data_str, add_context=False):
     """
     Preprocess Q&A data from a JSON file and return formatted question-answer pairs.
     Input is a formatted json str derived from the json in the previous function.
+    The function allows you to choose if to use the question's context (is exist) or not.
+    The considuration is the block size for the intended model. If model is not GPT2 and above 
+    (in size), better remove the context.
+    Args:
+        data_str (str): A formatted json str containing the QA
+        add_context (bool): Add the paragraph context to the QA data
+    Return
+        A list of pairs
     """
     data = json.loads(data_str)
     qa_pairs = []
+    input_lengths = []  # Track lengths for statistics
+    output_lengths = []  # Track lengths for statistics
 
     for article in data['data']:
         for paragraph in article['paragraphs']:
+            context = paragraph['context']  # Extract the context
             for qa in paragraph['qas']:
                 question = qa['question']
                 for answer in qa['answers']:
                     answer_text = answer['text']
-                    # Format: "[question] [answer] <|endoftext|>"
-                    qa_pair = f"{question} {answer_text}"
-                    encoded_qa_pair = encode(qa_pair, end_token=True)
-                    qa_pairs.append(encoded_qa_pair)
+                    # Store input and output as separate fields
+                    # Handle context
+                    input_text = f"{context}\n{question}" if add_context else f"{question}"
+                    output_text = f"{answer_text}"
+
+                    # Encode input and output, finish output with EOT
+                    input_encoded = encode(input_text, end_token=False)
+                    output_encoded = encode(output_text, end_token=True)
+
+                    qa_pairs.append({"input": input_encoded, "output": output_encoded})
+                    # Update length stats
+                    input_lengths.append(len(input_encoded))
+                    output_lengths.append(len(output_encoded))
+    
+    # Print statistics
+    print(f"[DATA STATS]: Input Lengths -> Min: {min(input_lengths)}, Max: {max(input_lengths)}, Avg: {sum(input_lengths) / len(input_lengths):.2f}")
+    print(f"[DATA STATS]: Output Lengths -> Min: {min(output_lengths)}, Max: {max(output_lengths)}, Avg: {sum(output_lengths) / len(output_lengths):.2f}")
     return qa_pairs
 
 # Code to preprocess the data, Will only run if the module is called directly
@@ -164,19 +188,21 @@ if __name__ == "__main__":
     qa_input_path = os.path.join(os.path.dirname(__file__), 'qa_input.json')
     qa_extracted_dict = download_data(selected_qa_url, qa_input_path)
 
-    # Preprocess and split QA data
     qa_pairs = preprocess_qa_data(qa_extracted_dict)
     split_index = int(len(qa_pairs) * 0.9)
-    qa_train_ids = qa_pairs[:split_index]
-    qa_val_ids = qa_pairs[split_index:]
+    qa_train_data = qa_pairs[:split_index]
+    qa_val_data = qa_pairs[split_index:]
 
-    # Flatten and save QA data
-    qa_train_ids = np.array([token_id for pair in qa_train_ids for token_id in pair], dtype=np.uint16)
-    qa_val_ids = np.array([token_id for pair in qa_val_ids for token_id in pair], dtype=np.uint16)
-    print(f"[RUNTIME INFO]: QA train has {len(qa_train_ids):,} tokens")
-    print(f"[RUNTIME INFO]: QA val has {len(qa_val_ids):,} tokens")
+    # Save QA data as JSON files
+    qa_train_path = os.path.join(os.path.dirname(__file__), 'qa_train.json')
+    qa_val_path = os.path.join(os.path.dirname(__file__), 'qa_val.json')
 
-    qa_train_ids.tofile(os.path.join(os.path.dirname(__file__), 'qa_train.bin'))
-    qa_val_ids.tofile(os.path.join(os.path.dirname(__file__), 'qa_val.bin'))
+    with open(qa_train_path, 'w') as train_file:
+        json.dump(qa_train_data, train_file)
+    with open(qa_val_path, 'w') as val_file:
+        json.dump(qa_val_data, val_file)
+
+    print(f"[RUNTIME INFO]: QA train has {len(qa_train_data):,} QA pairs")
+    print(f"[RUNTIME INFO]: QA val has {len(qa_val_data):,} QA pairs")
 
     print("[RUNTIME STATUS]: Data preprocessing complete.")

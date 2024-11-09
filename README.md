@@ -87,7 +87,8 @@ python playground.py
 
 ## TO-DO
 1. Add 'continue training' functionality for both pretrain and finetune stage from existing model weights
-2. Inspect finetuning parameters and input configuration.
+2. Integrate memory track in the process
+3. Fix finetune module
 
 ## GitHub Push Actions
 To commit and push all changes to the repository follow these steps:

@@ -3,4 +3,5 @@ pandas
 tiktoken
 torch
 transformers
+psutil
 

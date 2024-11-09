@@ -1,7 +1,5 @@
 import os
 import time
-import json
-from contextlib import nullcontext
 
 import numpy as np
 import torch
@@ -10,8 +8,10 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.*weights_only=False.*")
 
 # Local code
-from gpt import GPT
-from data.data_load import encode, decode
+from train_utils import (
+    DEVICE, DEVICE_TYPE, DTYPE, CTX, DATA_DIR,
+    initialize_model, load_configurations, get_model_choice, cpu_memory_usage
+)
 
 # Training parameters
 EVAL_INTERVAL = 25  # Number of iterations until validation
@@ -22,48 +22,6 @@ LEARNING_RATE = 2e-4
 WEIGHT_DECAY = 0.01
 BETA1, BETA2 = 0.9, 0.98
 GRAD_CLIP = 1.0
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-DTYPE = 'float16' if torch.cuda.is_available() else 'float32'
-DEVICE_TYPE = 'cuda' if 'cuda' in DEVICE else 'cpu'
-PTDTYPE = {'float32': torch.float32, 'float16': torch.float16}[DTYPE]
-CTX = nullcontext() if DEVICE_TYPE == 'cpu' else torch.amp.autocast(device_type=DEVICE_TYPE, dtype=PTDTYPE)
-
-# Model Configuration Path
-CONFIG_PATH = 'model_config.json'
-DATA_DIR = 'data'
-
-
-def load_configurations():
-    with open(CONFIG_PATH, 'r') as f:
-        return json.load(f)
-
-
-def get_model_choice(configs):
-    # Display available model configurations and prompt the user to choose
-    print("Available model configurations:")
-    for idx, model_name in enumerate(configs.keys()):
-        print(f"{idx + 1}: {model_name}")
-    choice = int(input("Select a model configuration by number: ")) - 1
-    model_name = list(configs.keys())[choice]
-    return model_name, configs[model_name]
-
-
-def initialize_model(model_config, model_name):
-    out_dir = f'out\{model_name}'
-    os.makedirs(out_dir, exist_ok=True)
-
-    # Set seeds and enable TF32 if using CUDA
-    torch.manual_seed(1337)
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
-
-    # Initialize the model
-    print(f"[RUNTIME STATUS]: Initializing {model_name} model...")
-    model = GPT(model_config)
-    model.to(DEVICE)
-
-    return model, out_dir
-
 
 def load_data():
     # Load training and validation data
@@ -92,6 +50,9 @@ def train_model(model, optimizer, data, model_config, out_dir, model_name):
     print(f"[RUNTIME INFO]: Best model will be saved as {base_model_path}")
 
     for iter_num in range(MAX_ITERS):
+        # Monitor CPU memory usage
+        mem_use = cpu_memory_usage()
+        
         # Fetch a batch
         X, Y = get_batch(data, 'train', model_config)
 
@@ -111,7 +72,7 @@ def train_model(model, optimizer, data, model_config, out_dir, model_name):
             model.eval()
             train_loss = sum(model(*get_batch(data, 'train', model_config))[1].item() for _ in range(VALIDATION_SAMPLE_SIZE)) / VALIDATION_SAMPLE_SIZE
             val_loss = sum(model(*get_batch(data, 'val', model_config))[1].item() for _ in range(VALIDATION_SAMPLE_SIZE)) / VALIDATION_SAMPLE_SIZE
-            print(f"[RUNTIME STATUS]: Iter {iter_num}: train loss {train_loss:.4f}, val loss {val_loss:.4f}, time {(elapsed/60):.2f}m")
+            print(f"[RUNTIME STATUS]: Iter {iter_num}: train loss {train_loss:.4f}, val loss {val_loss:.4f}, time {(elapsed/60):.2f}m, [CPU USAGE] Memory Usage: {mem_use}")
             model.train()
 
             # Save model checkpoint, if validation loss decreased
@@ -152,14 +113,16 @@ def main():
     model_name, model_config = get_model_choice(configs)
 
     # Initialize model
-    model, out_dir = initialize_model(model_config, model_name)
+    model, optimizer, out_dir = initialize_model(model_config=model_config,
+                                                 model_name=model_name,
+                                                 step='base_model',
+                                                 learning_rate=LEARNING_RATE,
+                                                 weight_decay=WEIGHT_DECAY,
+                                                 betas=(BETA1, BETA2))
 
     # Load data
     train_data, val_data = load_data()
     data = {'train': train_data, 'val': val_data}
-
-    # Initialize optimizer
-    optimizer = model.configure_optimizers(WEIGHT_DECAY, LEARNING_RATE, (BETA1, BETA2), DEVICE_TYPE)
 
     # Train model
     base_model_path = train_model(model, optimizer, data, model_config, out_dir, model_name)
