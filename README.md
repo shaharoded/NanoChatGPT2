@@ -41,9 +41,9 @@ After running this file you'll have 6 new files in this repository:
 1. `pretrain_input.txt` - The full readable .txt file - Your entire data
 2. `pretrain_train.bin` - The tokenized train data for the model, holding 90% of the dataset.
 3. `pretrain_val.bin` - The tokenized validation data for the model, holding 10% of the dataset.
-4. `qa_input.txt` - The full .json file of the question / answer data, unprocessed.
-5. `qa_train.bin` - The tokenized train data for the model, holding 90% of the dataset.
-6. `qa_val.bin` - The tokenized validation data for the model, holding 10% of the dataset.
+4. `qa_input.json` - The full .json file of the question / answer data, unprocessed.
+5. `qa_train.json` - The tokenized train data for the model, holding 90% of the dataset.
+6. `qa_val.json` - The tokenized validation data for the model, holding 10% of the dataset.
 
 
 Those can later be accessed in the training loops. This step should only be performed once to generate the data files, as newer files will run over older files.
@@ -86,9 +86,8 @@ python playground.py
 ```
 
 ## TO-DO
-1. Add 'continue training' functionality for both pretrain and finetune stage from existing model weights
-2. Integrate memory track in the process
-3. Fix finetune module
+1. Fix finetune function in qa_finetune.py
+
 
 ## GitHub Push Actions
 To commit and push all changes to the repository follow these steps:

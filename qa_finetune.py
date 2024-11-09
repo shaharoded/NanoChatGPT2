@@ -1,10 +1,10 @@
 import numpy as np
 import random
 import torch
+from torch.nn import functional as F
 import os
 import time
 import json
-import itertools
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.*weights_only=False.*")
@@ -51,8 +51,7 @@ def load_qa_data():
 
 def finetune_model(model, optimizer, data, model_name, block_size):
     """
-    Fine-tune the model on the QA dataset using epochs. Training loop will shuffle all QA 
-    pairs and will iterate over tham one by one, skipping on ones bigger than block_size.
+    Fine-tune the model on the QA dataset using epochs.
     Args:
         model: The GPT model to be fine-tuned.
         optimizer: The optimizer for the model.
@@ -70,44 +69,55 @@ def finetune_model(model, optimizer, data, model_name, block_size):
 
     for epoch in range(EPOCHS):
         random.shuffle(train_data)  # Shuffle data at the start of each epoch
-        valid_pairs = 0  # Track valid QA pairs processed in this epoch and for checkpoints
+        valid_pairs = 0  # Track valid QA pairs processed in this epoch
 
-        for pair_idx, pair in enumerate(data['train']):
-            X = torch.tensor(pair['input'], dtype=torch.int64)
-            Y = torch.tensor(pair['output'], dtype=torch.int64)
-            
-            # Add batch dimension (unsqueeze)
-            X = X.unsqueeze(0).to(DEVICE)
-            Y = Y.unsqueeze(0).to(DEVICE)
-            
-            if X.shape[0] + Y.shape[0] > block_size:
+        for pair in train_data:
+            # Prepare input and output tensors
+            input_tensor = torch.tensor(pair['input'], dtype=torch.int64).to(DEVICE)
+            output_tensor = torch.tensor(pair['output'], dtype=torch.int64).to(DEVICE)
+
+            # Combine input and output for full sequence
+            full_sequence = torch.cat([input_tensor, output_tensor], dim=0).unsqueeze(0)  # Add batch dimension
+
+            # Skip pairs exceeding the block size
+            if full_sequence.size(1) > block_size:
                 continue
-            else:
-                valid_pairs += 1
+
+            valid_pairs += 1
 
             # Forward pass
             optimizer.zero_grad()
-            logits, loss = model(X, Y)
+            logits, _ = model(full_sequence)
+
+            # Extract logits corresponding to the output tokens
+            logits_for_loss = logits[:, -output_tensor.size(0):, :]  # Only the output token logits
+            loss = F.cross_entropy(
+                logits_for_loss.view(-1, logits.size(-1)),  # Flatten logits
+                output_tensor.view(-1)  # Flatten targets
+            )
 
             # Backward pass and optimization
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
             optimizer.step()
 
-            # Evaluate and log every evaluation_iters
+            # Log every EVAL_ITERS
             if valid_pairs % EVAL_ITERS == 0:
                 elapsed = time.time() - start_time
                 model.eval()
                 val_loss = sum(
-                    model(
-                        torch.tensor(pair['input'] + pair['output'], dtype=torch.int64).unsqueeze(0).to(DEVICE),
-                        torch.tensor(pair['output'], dtype=torch.int64).unsqueeze(0).to(DEVICE)
-                    )[1].item()
+                    F.cross_entropy(
+                        model(
+                            torch.tensor(pair['input'] + pair['output'], dtype=torch.int64).unsqueeze(0).to(DEVICE),
+                            torch.tensor(pair['output'], dtype=torch.int64).unsqueeze(0).to(DEVICE)
+                        )[0][:, -len(pair['output']):, :].view(-1, logits.size(-1)),  # Flatten logits
+                        torch.tensor(pair['output'], dtype=torch.int64).to(DEVICE).view(-1)  # Flatten targets
+                    ).item()
                     for pair in val_data
                 ) / len(val_data)
 
                 print(
-                    f"[RUNTIME STATUS]: EPOCH: {epoch + 1}/{EPOCHS} (No.pairs={valid_pairs}), val loss {val_loss:.4f}, elapsed time {elapsed/60:.2f}m"
+                    f"[RUNTIME STATUS]: EPOCH: {epoch + 1}/{EPOCHS}, Pairs: {valid_pairs}, Val loss: {val_loss:.4f}, Time: {elapsed / 60:.2f}m"
                 )
 
                 # Save the model if the validation loss improves
@@ -118,9 +128,10 @@ def finetune_model(model, optimizer, data, model_name, block_size):
 
                 model.train()
 
-        # If no valid QA pair was processed in the entire epoch, raise an error
-        if valid_pairs <= EVAL_ITERS:
-            raise ValueError(f"[ERROR]: Not enough QA pairs were processed during epoch {epoch + 1} for evaluation. Consider increasing block size or dataset size.")
+        if valid_pairs == 0:
+            raise ValueError(
+                f"[ERROR]: No valid QA pairs processed in epoch {epoch + 1}. Consider increasing block size or dataset size."
+            )
 
     print("[RUNTIME STATUS]: Fine-tuning complete.")
     if checkpoint_path:
@@ -176,7 +187,7 @@ def main():
     data = {'train': qa_train_data, 'val': qa_val_data}
 
     # Fine-tune the model
-    checkpoint_path = finetune_model(model, optimizer, data, model_name)
+    checkpoint_path = finetune_model(model, optimizer, data, model_name, block_size)
 
     # Load the best model and generate examples
     if checkpoint_path:

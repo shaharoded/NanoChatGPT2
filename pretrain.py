@@ -72,7 +72,7 @@ def train_model(model, optimizer, data, model_config, out_dir, model_name):
             model.eval()
             train_loss = sum(model(*get_batch(data, 'train', model_config))[1].item() for _ in range(VALIDATION_SAMPLE_SIZE)) / VALIDATION_SAMPLE_SIZE
             val_loss = sum(model(*get_batch(data, 'val', model_config))[1].item() for _ in range(VALIDATION_SAMPLE_SIZE)) / VALIDATION_SAMPLE_SIZE
-            print(f"[RUNTIME STATUS]: Iter {iter_num}: train loss {train_loss:.4f}, val loss {val_loss:.4f}, time {(elapsed/60):.2f}m, [CPU USAGE] Memory Usage: {mem_use}")
+            print(f"[RUNTIME STATUS]: Iter {iter_num}: train loss {train_loss:.3f}, val loss {val_loss:.3f}, time {(elapsed/60):.1f}m, Memory Usage: {mem_use}")
             model.train()
 
             # Save model checkpoint, if validation loss decreased
