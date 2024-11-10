@@ -202,7 +202,7 @@ if __name__ == "__main__":
     split_index = int(len(qa_tokenized_stream) * 0.9)
 
     # Find the last <EOT> token in the training split
-    eot_token_id = TOKENIZER.eot_token  # Ensure this is correctly set
+    eot_token_id = TOKENIZER.eot_token  # Ensure this is correctly set for the used tokenizer
     while split_index < len(qa_tokenized_stream) and qa_tokenized_stream[split_index] != eot_token_id:
         split_index += 1
 
