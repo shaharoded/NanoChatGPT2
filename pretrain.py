@@ -16,7 +16,7 @@ from train_utils import (
 # Training parameters
 EVAL_INTERVAL = 25  # Number of iterations until validation
 VALIDATION_SAMPLE_SIZE = 100  # Number of batches for validation
-MAX_ITERS = 10000  # Total number of iterations
+MAX_ITERS = 1000  # Total number of iterations
 BATCH_SIZE = 8
 LEARNING_RATE = 2e-4
 WEIGHT_DECAY = 0.01
@@ -124,6 +124,11 @@ def main():
     train_data, val_data = load_data()
     data = {'train': train_data, 'val': val_data}
 
+    # Estimate number of epochs based on the parameters
+    steps_per_epoch = len(train_data) / (BATCH_SIZE * model_config['block_size'])
+    total_epochs = MAX_ITERS / steps_per_epoch
+    print(f"[TRAINING INFO]: Estimated number of epochs: {total_epochs:.2f}")
+    
     # Train model
     base_model_path = train_model(model, optimizer, data, model_config, out_dir, model_name)
 
