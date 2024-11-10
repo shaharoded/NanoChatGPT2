@@ -6,7 +6,7 @@ import numpy as np
 import gzip
 
 # Initialize the tiktoken encoding object
-tokenizer = tiktoken.get_encoding("gpt2")
+TOKENIZER = tiktoken.get_encoding("gpt2")
 
 # Tokenization functions
 def encode(text, end_token=False):
@@ -16,12 +16,12 @@ def encode(text, end_token=False):
         end_token (bool): Add the <|endoftext|> token to the encoding process (needed for QA)
     """
     if end_token:
-        return tokenizer.encode_ordinary(text) + [tokenizer.eot_token]  # eot_token is the ID for <|endoftext|>
-    return tokenizer.encode_ordinary(text)
+        return TOKENIZER.encode_ordinary(text) + [TOKENIZER.eot_token]  # eot_token is the ID for <|endoftext|>
+    return TOKENIZER.encode_ordinary(text)
 
 def decode(token_ids):
     """Decode a list of token IDs back into a string using GPT-2 BPE."""
-    return tokenizer.decode(token_ids)
+    return TOKENIZER.decode(token_ids)
 
 def download_data(url, output_file_name):
     """
@@ -108,7 +108,7 @@ def preprocess_qa_data(data_str, add_context=False, eot_token_id=None):
     input_lengths = []  # Track lengths for statistics
     output_lengths = []  # Track lengths for statistics
 
-    eot_token_id = eot_token_id or tokenizer.eot_token  # Use provided EOT token ID or default
+    eot_token_id = eot_token_id or TOKENIZER.eot_token  # Use provided EOT token ID or default
 
     for article in data['data']:
         for paragraph in article['paragraphs']:
@@ -202,7 +202,7 @@ if __name__ == "__main__":
     split_index = int(len(qa_tokenized_stream) * 0.9)
 
     # Find the last <EOT> token in the training split
-    eot_token_id = tokenizer.eot_token  # Ensure this is correctly set
+    eot_token_id = TOKENIZER.eot_token  # Ensure this is correctly set
     while split_index < len(qa_tokenized_stream) and qa_tokenized_stream[split_index] != eot_token_id:
         split_index += 1
 

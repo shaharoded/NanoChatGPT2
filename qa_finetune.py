@@ -1,18 +1,18 @@
+import numpy as np
 import random
 import torch
 from torch.nn import functional as F
 import os
 import time
-import json
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.*weights_only=False.*")
 
 # Local code
-from data.data_load import encode, tokenizer
+from data.data_load import encode, TOKENIZER
 
 from train_utils import (
-    DEVICE, DEVICE_TYPE, DATA_DIR,
+    DEVICE, DTYPE, CTX, DATA_DIR,
     initialize_model, load_configurations, get_model_choice
 )
 
@@ -28,230 +28,163 @@ FT_WEIGHT_DECAY = 0.005  # Different weight decay for fine-tuning
 FT_BETA1, FT_BETA2 = 0.9, 0.98
 GRAD_CLIP = 1.0
 
-EVAL_ITERS = 200
-EPOCHS = 8
-
-'''
-The model is limited to sequence length == model.block_size, so batch size should be small enough to ensure
-no longer sequences are passed.
-QA data has ~80K pairs. I'll feed them question by question while ensuring each pair is not too long for the batch. 
-On this module I'll work by EPOCHS and not ITERATIONS (concatenated block_size text)
-'''
+MAX_ITERS = 1000
+BATCH_SIZE = 8
+VALIDATION_SAMPLE_SIZE = 100
+EVAL_INTERVAL = 25
 
 
 def load_qa_data():
-    """Load QA train and validation data from JSON files."""
-    with open(QA_TRAIN_PATH, 'r') as f:
-        qa_train_data = json.load(f)  # List of tokenized QA pairs
-    with open(QA_VAL_PATH, 'r') as f:
-        qa_val_data = json.load(f)  # List of tokenized QA pairs
-    return qa_train_data, qa_val_data
+    # Load training and validation data
+    train_data = np.memmap(os.path.join(DATA_DIR, 'qa_train.bin'), dtype=np.uint16, mode='r')
+    val_data = np.memmap(os.path.join(DATA_DIR, 'qa_val.bin'), dtype=np.uint16, mode='r')
+    return train_data, val_data
+
+def filter_and_trim_qa_stream(data_stream, block_size):
+    """
+    Filter out long QA pairs and trim the tokenized stream to only valid QA pairs.
+    
+    Args:
+        data_stream (np.array): The continuous tokenized stream.
+        block_size (int): Maximum sequence length for a model input.
+    
+    Returns:
+        tuple: A filtered and trimmed tokenized stream and valid start indices.
+    
+    Raises:
+        ValueError: If the number of valid QA pairs is less than VALIDATION_SAMPLE_SIZE.
+    """
+    filtered_stream = []
+    valid_indices = []
+    current_start = 0
+    valid_pairs_count = 0
+
+    for i, token in enumerate(data_stream):
+        if token == TOKENIZER.eot_token:
+            length = i - current_start + 1  # Include the <EOT> token
+            if length <= block_size:
+                # Include valid QA pair in the filtered stream
+                filtered_stream.extend(data_stream[current_start:i + 1])
+                valid_indices.append(current_start)
+                valid_pairs_count += 1
+            # Move to the next QA pair
+            current_start = i + 1
+
+    # Check if we have enough QA pairs for evaluation
+    if valid_pairs_count < VALIDATION_SAMPLE_SIZE:
+        raise ValueError(
+            f"[ERROR]: Not enough QA pairs to evaluate the model. Found {valid_pairs_count} pairs, "
+            f"but require at least {VALIDATION_SAMPLE_SIZE}. Consider increasing block size or use shorter QAs."
+        )
+
+    print(f"[DATA FILTER]: Retained {valid_pairs_count} valid QA pairs within block_size")
+    return np.array(filtered_stream, dtype=np.int64), valid_indices
 
 
-def pad_to_block_size(tensor, block_size, pad_token=tokenizer.eot_token):
+def pad_to_block_size(tensor, block_size, pad_token=TOKENIZER.eot_token):
     padding = block_size - tensor.size(0)
     if padding > 0:
         tensor = F.pad(tensor, (0, padding), value=pad_token)
     return tensor
 
-def finetune_model(model, optimizer, data, model_name, block_size):
+
+def get_batch(data_stream, valid_indices, block_size):
     """
-    Fine-tune the model on the QA dataset using epochs.
+    Get a batch of data for fine-tuning, ensuring QA boundaries are respected.
+    Args:
+        data_stream (np.array): The continuous tokenized stream.
+        valid_indices (list): Precomputed list of valid start indices.
+        block_size (int): Maximum sequence length for the model.
+    
+    Returns:
+        tuple: (input_tensor, target_tensor) for the model.
+    """
+    batch_start_indices = random.choices(valid_indices, k=BATCH_SIZE)
+
+    # Prepare the batch
+    input_batch = []
+    target_batch = []
+
+    for start_idx in batch_start_indices:
+        end_idx = min(start_idx + block_size, len(data_stream))
+        sequence = data_stream[start_idx:end_idx]
+        sequence = pad_to_block_size(torch.tensor(sequence, dtype=torch.int64), block_size)
+        input_batch.append(sequence[:-1])  # Input (all but the last token)
+        target_batch.append(sequence[1:])  # Target (all but the first token)
+
+    input_tensor = torch.stack(input_batch).to(DEVICE)
+    target_tensor = torch.stack(target_batch).to(DEVICE)
+    return input_tensor, target_tensor
+
+
+def finetune_model(model, optimizer, data, model_config, out_dir, model_name):
+    """
+    Fine-tune the model on QA data.
     Args:
         model: The GPT model to be fine-tuned.
-        optimizer: The optimizer for the model.
-        data (dict): Dictionary containing 'train' and 'val' splits, each is a list of dictionaries, each dictionary is a pair.
-        model_name (str): Name of the model for saving checkpoints.
-        block_size (int): Maximum sequence length for input + output.
+        optimizer: Optimizer for the model.
+        data (dict): Dictionary containing 'train' and 'val' data streams and valid indices.
+        model_config (dict): Configuration for the model.
+        out_dir (str): Directory for saving model checkpoints.
+        model_name (str): Name of the model for checkpointing.
+    
+    Returns:
+        str: Path to the best model checkpoint.
     """
-    print("[RUNTIME STATUS]: Starting fine-tuning on QA data...")
-    print(f"Model block_size: {model.config['block_size']}")
+    scaler = torch.amp.GradScaler(enabled=(DTYPE == 'float16'))
     start_time = time.time()
     best_val_loss = float('inf')
-    checkpoint_path = None
+    ft_model_path = os.path.join(out_dir, f"{model_name}_fine_tuned.pt")
+    print(f"[RUNTIME INFO]: Best model will be saved as {ft_model_path}")
 
-    train_data = data['train']
-    val_data = data['val']
+    block_size = model_config['block_size']
 
-    for epoch in range(EPOCHS):
-        random.shuffle(train_data)  # Shuffle data at the start of each epoch
-        valid_pairs = 0  # Track valid QA pairs processed in this epoch
+    for iter_num in range(MAX_ITERS):
+        # Fetch a training batch
+        X, Y = get_batch(data['train']['stream'], data['train']['indices'], block_size)
 
-        for pair in train_data:
-            # Prepare input and output tensors
-            input_tensor = torch.tensor(pair['input'], dtype=torch.int64).to(DEVICE)
-            output_tensor = torch.tensor(pair['output'], dtype=torch.int64).to(DEVICE)
+        # Forward, backward, and update
+        with CTX:
+            logits, loss = model(X, Y)
+        optimizer.zero_grad(set_to_none=True)
+        scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+        scaler.step(optimizer)
+        scaler.update()
 
-            # Combine input and output for full sequence
-            full_sequence = torch.cat([input_tensor, output_tensor], dim=0)
-            if full_sequence.size(0) > block_size:
-                continue  # Skip sequences exceeding block_size
+        # Logging and validation
+        if iter_num % EVAL_INTERVAL == 0:
+            elapsed = time.time() - start_time
+            model.eval()
 
-            # Pad the sequence to block_size
-            full_sequence = pad_to_block_size(full_sequence, block_size, pad_token=tokenizer.eot_token).unsqueeze(0).to(DEVICE)
-            valid_pairs += 1
+            # Compute train and validation losses
+            train_loss = sum(
+                model(*get_batch(data['train']['stream'], data['train']['indices'], block_size))[1].item()
+                for _ in range(VALIDATION_SAMPLE_SIZE)
+            ) / VALIDATION_SAMPLE_SIZE
+            val_loss = sum(
+                model(*get_batch(data['val']['stream'], data['val']['indices'], block_size))[1].item()
+                for _ in range(VALIDATION_SAMPLE_SIZE)
+            ) / VALIDATION_SAMPLE_SIZE
 
-            # Forward pass
-            optimizer.zero_grad()
-            logits, _ = model(full_sequence)
+            print(f"[RUNTIME STATUS]: Iter {iter_num}: train loss {train_loss:.3f}, val loss {val_loss:.3f}, time {(elapsed / 60):.1f}m")
+            
+            # Save model checkpoint if validation loss improves
+            if val_loss < best_val_loss:
+                torch.save({
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'iter_num': iter_num,
+                    'train_loss': train_loss,
+                    'val_loss': val_loss
+                }, ft_model_path)
+                best_val_loss = val_loss
 
-            # Align logits with target tensor
-            target_tensor = full_sequence[:, 1:]  # Shift target by one token
-            logits = logits[:, :target_tensor.size(1), :]  # Align logits with target_tensor
-
-            # Compute loss
-            loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)),
-                target_tensor.view(-1),
-                ignore_index=tokenizer.eot_token  # Ignore padding token in the loss
-            )
-
-            # Backward pass and optimization
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
-            optimizer.step()
-
-            # Log every EVAL_ITERS
-            if valid_pairs % EVAL_ITERS == 0:
-                elapsed = time.time() - start_time
-                model.eval()
-                val_loss = sum(
-                    F.cross_entropy(
-                        model(
-                            torch.tensor(pair['input'] + pair['output'], dtype=torch.int64).unsqueeze(0).to(DEVICE)
-                        )[0][:, -len(pair['output']):, :].view(-1, logits.size(-1)),
-                        torch.tensor(pair['output'], dtype=torch.int64).to(DEVICE).view(-1)
-                    ).item()
-                    for pair in val_data
-                ) / len(val_data)
-
-                print(
-                    f"[RUNTIME STATUS]: EPOCH: {epoch + 1}/{EPOCHS}, Pairs: {valid_pairs}, Val loss: {val_loss:.4f}, Time: {elapsed / 60:.2f}m"
-                )
-
-                # Save the model if validation loss improves
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    checkpoint_path = os.path.join(OUT_DIR, model_name, f"{model_name}_fine_tuned.pt")
-                    torch.save(model.state_dict(), checkpoint_path)
-                    print(f"[RUNTIME STATUS]: Saved best model to {checkpoint_path}")
-
-                model.train()
-
-        if valid_pairs == 0:
-            raise ValueError(
-                f"[ERROR]: No valid QA pairs processed in epoch {epoch + 1}. Consider increasing block size or dataset size."
-            )
+            model.train()
 
     print("[RUNTIME STATUS]: Fine-tuning complete.")
-    return checkpoint_path
-
-# def finetune_model(model, optimizer, data, model_name, block_size):
-#     """
-#     Fine-tune the model on the QA dataset using epochs.
-#     Args:
-#         model: The GPT model to be fine-tuned.
-#         optimizer: The optimizer for the model.
-#         data (dict): Dictionary containing 'train' and 'val' splits, each is a list of dictionaries, each dictionary is a pair.
-#         model_name (str): Name of the model for saving checkpoints.
-#         block_size (int): Maximum sequence length for input + output.
-#     """
-#     print("[RUNTIME STATUS]: Starting fine-tuning on QA data...")
-#     print(f"Model block_size: {model.config['block_size']}")
-#     start_time = time.time()
-#     best_val_loss = float('inf')
-#     checkpoint_path = None
-
-#     train_data = data['train']
-#     val_data = data['val']
-
-#     for epoch in range(EPOCHS):
-#         random.shuffle(train_data)  # Shuffle data at the start of each epoch
-#         valid_pairs = 0  # Track valid QA pairs processed in this epoch
-
-#         for pair in train_data:
-#             # Prepare input and output tensors
-#             input_tensor = torch.tensor(pair['input'], dtype=torch.int64).to(DEVICE)
-#             output_tensor = torch.tensor(pair['output'], dtype=torch.int64).to(DEVICE)
-#             print(f"input shape: {input_tensor.shape}, output shape: {output_tensor.shape}")
-
-#             # Combine input and output for full sequence
-#             full_sequence = torch.cat([input_tensor, output_tensor], dim=0)
-#             print(f"full_sequence shape: {full_sequence.shape}")
-#             if full_sequence.size(0) > block_size:
-#                 continue  # Skip sequences exceeding block_size
-
-#             # Pad the sequence to block_size
-#             pad_token = tokenizer.eot_token  # Ensure you define this correctly
-#             print(f"pad_token: {pad_token}")
-#             full_sequence = pad_to_block_size(full_sequence, block_size, pad_token).unsqueeze(0)  # Add batch dimension
-#             print(f"full_sequence shape after padding: {full_sequence.shape}")
-#             # Skip sequences that are too short after padding
-#             if full_sequence.shape[1] > block_size:
-#                 print("QA sequence is bigger than block size, continue")
-#                 continue
-#             else:
-#                 valid_pairs += 1
-
-#                 # Forward pass
-#                 optimizer.zero_grad()
-#                 logits, _ = model(full_sequence)
-#                 print(f"logits shape: {logits.shape}")
-
-#                 # Target tensor is full_sequence shifted by one token
-#                 target_tensor = full_sequence[:, 1:]  # Shift target by one token
-#                 logits = logits[:, :target_tensor.size(1), :]
-#                 print(f"Logits shape: {logits.shape}, Target tensor shape: {target_tensor.shape}")
-
-
-#                 # Compute loss
-#                 loss = F.cross_entropy(
-#                     logits.view(-1, logits.size(-1)),
-#                     target_tensor.view(-1),
-#                     ignore_index=pad_token  # Ignore the padding token in the loss
-#                 )
-
-#                 # Backward pass and optimization
-#                 loss.backward()
-#                 torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
-#                 optimizer.step()
-
-#                 # Log every EVAL_ITERS
-#                 if valid_pairs % EVAL_ITERS == 0:
-#                     elapsed = time.time() - start_time
-#                     model.eval()
-#                     val_loss = sum(
-#                         F.cross_entropy(
-#                             model(
-#                                 torch.tensor(pair['input'] + pair['output'], dtype=torch.int64).unsqueeze(0).to(DEVICE)
-#                             )[0][:, -len(pair['output']):, :].view(-1, logits.size(-1)),
-#                             torch.tensor(pair['output'], dtype=torch.int64).to(DEVICE).view(-1)
-#                         ).item()
-#                         for pair in val_data
-#                     ) / len(val_data)
-
-#                     print(
-#                         f"[RUNTIME STATUS]: EPOCH: {epoch + 1}/{EPOCHS}, Pairs: {valid_pairs}, Val loss: {val_loss:.4f}, Time: {elapsed / 60:.2f}m"
-#                     )
-
-#                     # Save the model if the validation loss improves
-#                     if val_loss < best_val_loss:
-#                         best_val_loss = val_loss
-#                         checkpoint_path = os.path.join(OUT_DIR, model_name, f"{model_name}_fine_tuned.pt")
-#                         torch.save(model.state_dict(), checkpoint_path)
-
-#                     model.train()
-
-#         if valid_pairs == 0:
-#             raise ValueError(
-#                 f"[ERROR]: No valid QA pairs processed in epoch {epoch + 1}. Consider increasing block size or dataset size."
-#             )
-
-#     print("[RUNTIME STATUS]: Fine-tuning complete.")
-#     if checkpoint_path:
-#         print(f"[RUNTIME STATUS]: Best model saved to {checkpoint_path}")
-
-#     return checkpoint_path
+    return ft_model_path
 
 
 def generate_examples(model):
@@ -271,7 +204,7 @@ def generate_examples(model):
         input_tensor = torch.tensor(input_tokens, dtype=torch.int64).unsqueeze(0).to(DEVICE)
         with torch.no_grad():
             answer = model.generate_text(input_tensor, max_new_tokens=50, device=DEVICE)
-        print(f"Q: {question}\nA: {answer}\n")
+        print(f"Q: {question}\nA: {answer[len(question):]}\n")
 
 
 def main():
@@ -285,30 +218,62 @@ def main():
     # Get model choice from the available configurations
     model_name, model_config = get_model_choice(configs)
     block_size = model_config.get('block_size', 0)
+    if block_size == 0:
+        raise ValueError("[ERROR]: Block size must be specified in the model configuration.")
+
     # Initialize model
-    model, optimizer, _ = initialize_model(model_config=model_config,
-                                                model_name=model_name,
-                                                step='fine_tuned',
-                                                learning_rate=FT_LEARNING_RATE,
-                                                weight_decay=FT_WEIGHT_DECAY,
-                                                betas=(FT_BETA1, FT_BETA2))
+    model, optimizer, out_dir = initialize_model(
+        model_config=model_config,
+        model_name=model_name,
+        step='fine_tuned',
+        learning_rate=FT_LEARNING_RATE,
+        weight_decay=FT_WEIGHT_DECAY,
+        betas=(FT_BETA1, FT_BETA2)
+    )
 
-    # Initialize optimizer with fine-tuning parameters
-    optimizer = model.configure_optimizers(FT_WEIGHT_DECAY, FT_LEARNING_RATE, (FT_BETA1, FT_BETA2), DEVICE_TYPE)
-
-    # Load QA data
+    # Load QA data as binary streams
     qa_train_data, qa_val_data = load_qa_data()
-    data = {'train': qa_train_data, 'val': qa_val_data}
+
+    # Filter and trim data streams
+    print("[RUNTIME STATUS]: Filtering and trimming QA training data...")
+    qa_train_stream, train_indices = filter_and_trim_qa_stream(qa_train_data, block_size)
+    print("[RUNTIME STATUS]: Filtering and trimming QA validation data...")
+    qa_val_stream, val_indices = filter_and_trim_qa_stream(qa_val_data, block_size)
+
+    # Ensure data streams are not empty
+    if len(train_indices) == 0:
+        raise ValueError("[ERROR]: No valid training QA pairs found. Please check your data or block size.")
+    if len(val_indices) == 0:
+        raise ValueError("[ERROR]: No valid validation QA pairs found. Please check your data or block size.")
+
+    # Create the data dictionary
+    data = {
+        'train': {'stream': qa_train_stream, 'indices': train_indices},
+        'val': {'stream': qa_val_stream, 'indices': val_indices}
+    }
 
     # Fine-tune the model
-    checkpoint_path = finetune_model(model, optimizer, data, model_name, block_size)
+    print("[RUNTIME STATUS]: Starting fine-tuning process...")
+    checkpoint_path = finetune_model(
+        model=model,
+        optimizer=optimizer,
+        data=data,
+        model_config=model_config,
+        out_dir=out_dir,
+        model_name=model_name
+    )
 
     # Load the best model and generate examples
     if checkpoint_path:
+        print(f"[RUNTIME STATUS]: Loading best model from {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location=DEVICE)
-        model.load_state_dict(checkpoint)
+        model.load_state_dict(checkpoint['model_state_dict'])
         model.to(DEVICE)
-    generate_examples(model)
+
+        print("[RUNTIME INFO]: Generating example outputs...")
+        generate_examples(model)
+    else:
+        print("[RUNTIME WARNING]: Fine-tuning did not complete successfully. Skipping example generation.")
 
 
 if __name__ == "__main__":

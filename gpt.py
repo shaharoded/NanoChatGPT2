@@ -4,7 +4,7 @@ from torch.nn import functional as F
 import math
 
 # Local Code
-from data.data_load import tokenizer, encode, decode
+from data.data_load import TOKENIZER, encode, decode
 
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
@@ -194,7 +194,7 @@ class GPT(nn.Module):
         Returns:
             torch.Tensor: The complete sequence of token IDs, including both the prefix and the generated tokens.
         """
-        eot_token_id = tokenizer.eot_token  # The token ID for <|endoftext|>
+        eot_token_id = TOKENIZER.eot_token  # The token ID for <|endoftext|>
         for _ in range(max_new_tokens):
             idx_cond = idx if idx.size(1) <= self.config["block_size"] else idx[:, -self.config["block_size"]:]
             logits, _ = self(idx_cond)
