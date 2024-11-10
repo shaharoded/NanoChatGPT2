@@ -90,49 +90,58 @@ def download_data(url, output_file_name):
         raise ValueError(f'Unrecognized file type found, the original file downloaded is: {original_file_name}')
     
 # Function to preprocess Q&A data
-def preprocess_qa_data(data_str, add_context=False):
+def preprocess_qa_data(data_str, add_context=False, eot_token_id=None):
     """
-    Preprocess Q&A data from a JSON file and return formatted question-answer pairs.
-    Input is a formatted json str derived from the json in the previous function.
-    The function allows you to choose if to use the question's context (is exist) or not.
-    The considuration is the block size for the intended model. If model is not GPT2 and above 
-    (in size), better remove the context.
+    Preprocess Q&A data from a JSON file and return a continuous stream of tokenized text,
+    while also printing statistics on input and output lengths for QA pairs.
+    
     Args:
-        data_str (str): A formatted json str containing the QA
-        add_context (bool): Add the paragraph context to the QA data
-    Return
-        A list of pairs
+        data_str (str): A formatted JSON string containing the QA data.
+        add_context (bool): Add the paragraph context to the QA data.
+        eot_token_id (int): Token ID for <EOT>. If not provided, defaults to the tokenizer's EOT token.
+    
+    Returns:
+        np.array: A continuous stream of token IDs for all QA pairs, concatenated with <EOT>.
     """
     data = json.loads(data_str)
-    qa_pairs = []
+    tokenized_stream = []
     input_lengths = []  # Track lengths for statistics
     output_lengths = []  # Track lengths for statistics
+
+    eot_token_id = eot_token_id or tokenizer.eot_token  # Use provided EOT token ID or default
 
     for article in data['data']:
         for paragraph in article['paragraphs']:
             context = paragraph['context']  # Extract the context
             for qa in paragraph['qas']:
                 question = qa['question']
+                if not question.endswith("?"):
+                    question += "?"  # Ensure question ends with a "?"
+
                 for answer in qa['answers']:
                     answer_text = answer['text']
-                    # Store input and output as separate fields
+                    
                     # Handle context
                     input_text = f"{context}\n{question}" if add_context else f"{question}"
                     output_text = f"{answer_text}"
 
-                    # Encode input and output, finish output with EOT
+                    # Encode input and output
                     input_encoded = encode(input_text, end_token=False)
-                    output_encoded = encode(output_text, end_token=True)
+                    output_encoded = encode(output_text, end_token=False)
 
-                    qa_pairs.append({"input": input_encoded, "output": output_encoded})
+                    # Concatenate QA pair with EOT token
+                    tokenized_qa = input_encoded + output_encoded + [eot_token_id]
+                    tokenized_stream.extend(tokenized_qa)
+
                     # Update length stats
                     input_lengths.append(len(input_encoded))
                     output_lengths.append(len(output_encoded))
-    
+
     # Print statistics
     print(f"[DATA STATS]: Input Lengths -> Min: {min(input_lengths)}, Max: {max(input_lengths)}, Avg: {sum(input_lengths) / len(input_lengths):.2f}")
     print(f"[DATA STATS]: Output Lengths -> Min: {min(output_lengths)}, Max: {max(output_lengths)}, Avg: {sum(output_lengths) / len(output_lengths):.2f}")
-    return qa_pairs
+
+    return np.array(tokenized_stream, dtype=np.int64)
 
 # Code to preprocess the data, Will only run if the module is called directly
 if __name__ == "__main__":
@@ -184,25 +193,33 @@ if __name__ == "__main__":
     selected_qa_name = list(qa_options.keys())[choice]
     selected_qa_url = qa_options[selected_qa_name]
 
-    # Download QA data
+    # Download QA data and turn to tokenized stream
     qa_input_path = os.path.join(os.path.dirname(__file__), 'qa_input.json')
     qa_extracted_dict = download_data(selected_qa_url, qa_input_path)
+    qa_tokenized_stream = preprocess_qa_data(qa_extracted_dict)
+    
+    # Define split point for train and validation
+    split_index = int(len(qa_tokenized_stream) * 0.9)
 
-    qa_pairs = preprocess_qa_data(qa_extracted_dict)
-    split_index = int(len(qa_pairs) * 0.9)
-    qa_train_data = qa_pairs[:split_index]
-    qa_val_data = qa_pairs[split_index:]
+    # Find the last <EOT> token in the training split
+    eot_token_id = tokenizer.eot_token  # Ensure this is correctly set
+    while split_index < len(qa_tokenized_stream) and qa_tokenized_stream[split_index] != eot_token_id:
+        split_index += 1
 
-    # Save QA data as JSON files
-    qa_train_path = os.path.join(os.path.dirname(__file__), 'qa_train.json')
-    qa_val_path = os.path.join(os.path.dirname(__file__), 'qa_val.json')
+    # Include the <EOT> token in the training set and start validation after it
+    qa_train_stream = qa_tokenized_stream[:split_index + 1]
+    qa_val_stream = qa_tokenized_stream[split_index + 1:]
 
-    with open(qa_train_path, 'w') as train_file:
-        json.dump(qa_train_data, train_file)
-    with open(qa_val_path, 'w') as val_file:
-        json.dump(qa_val_data, val_file)
+    print(f"[RUNTIME INFO]: Adjusted split point at token {split_index} to align with <EOT>")
+    print(f"[RUNTIME INFO]: Train stream ends with {qa_train_stream[-1]} (should be <EOT>)")
+    print(f"[RUNTIME INFO]: Validation stream starts with {qa_val_stream[0]} (should not be <EOT>)")
 
-    print(f"[RUNTIME INFO]: QA train has {len(qa_train_data):,} QA pairs")
-    print(f"[RUNTIME INFO]: QA val has {len(qa_val_data):,} QA pairs")
+    # Save tokenized streams
+    qa_train_stream.tofile(os.path.join(os.path.dirname(__file__), 'qa_train.bin'))
+    qa_val_stream.tofile(os.path.join(os.path.dirname(__file__), 'qa_val.bin'))
 
-    print("[RUNTIME STATUS]: Data preprocessing complete.")
+    # Debug information
+    print(f"[RUNTIME INFO]: QA train data saved with {len(qa_train_stream):,} tokens")
+    print(f"[RUNTIME INFO]: QA val data saved with {len(qa_val_stream):,} tokens")
+
+    print("[RUNTIME STATUS]: Data preprocessing and bin file creation complete.")

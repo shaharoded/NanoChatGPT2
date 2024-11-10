@@ -1,4 +1,3 @@
-import numpy as np
 import random
 import torch
 from torch.nn import functional as F
@@ -10,7 +9,7 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.*weights_only=False.*")
 
 # Local code
-from data.data_load import encode
+from data.data_load import encode, tokenizer
 
 from train_utils import (
     DEVICE, DEVICE_TYPE, DATA_DIR,
@@ -49,6 +48,12 @@ def load_qa_data():
     return qa_train_data, qa_val_data
 
 
+def pad_to_block_size(tensor, block_size, pad_token=tokenizer.eot_token):
+    padding = block_size - tensor.size(0)
+    if padding > 0:
+        tensor = F.pad(tensor, (0, padding), value=pad_token)
+    return tensor
+
 def finetune_model(model, optimizer, data, model_name, block_size):
     """
     Fine-tune the model on the QA dataset using epochs.
@@ -60,6 +65,7 @@ def finetune_model(model, optimizer, data, model_name, block_size):
         block_size (int): Maximum sequence length for input + output.
     """
     print("[RUNTIME STATUS]: Starting fine-tuning on QA data...")
+    print(f"Model block_size: {model.config['block_size']}")
     start_time = time.time()
     best_val_loss = float('inf')
     checkpoint_path = None
@@ -77,23 +83,27 @@ def finetune_model(model, optimizer, data, model_name, block_size):
             output_tensor = torch.tensor(pair['output'], dtype=torch.int64).to(DEVICE)
 
             # Combine input and output for full sequence
-            full_sequence = torch.cat([input_tensor, output_tensor], dim=0).unsqueeze(0)  # Add batch dimension
+            full_sequence = torch.cat([input_tensor, output_tensor], dim=0)
+            if full_sequence.size(0) > block_size:
+                continue  # Skip sequences exceeding block_size
 
-            # Skip pairs exceeding the block size
-            if full_sequence.size(1) > block_size:
-                continue
-
+            # Pad the sequence to block_size
+            full_sequence = pad_to_block_size(full_sequence, block_size, pad_token=tokenizer.eot_token).unsqueeze(0).to(DEVICE)
             valid_pairs += 1
 
             # Forward pass
             optimizer.zero_grad()
             logits, _ = model(full_sequence)
 
-            # Extract logits corresponding to the output tokens
-            logits_for_loss = logits[:, -output_tensor.size(0):, :]  # Only the output token logits
+            # Align logits with target tensor
+            target_tensor = full_sequence[:, 1:]  # Shift target by one token
+            logits = logits[:, :target_tensor.size(1), :]  # Align logits with target_tensor
+
+            # Compute loss
             loss = F.cross_entropy(
-                logits_for_loss.view(-1, logits.size(-1)),  # Flatten logits
-                output_tensor.view(-1)  # Flatten targets
+                logits.view(-1, logits.size(-1)),
+                target_tensor.view(-1),
+                ignore_index=tokenizer.eot_token  # Ignore padding token in the loss
             )
 
             # Backward pass and optimization
@@ -108,10 +118,9 @@ def finetune_model(model, optimizer, data, model_name, block_size):
                 val_loss = sum(
                     F.cross_entropy(
                         model(
-                            torch.tensor(pair['input'] + pair['output'], dtype=torch.int64).unsqueeze(0).to(DEVICE),
-                            torch.tensor(pair['output'], dtype=torch.int64).unsqueeze(0).to(DEVICE)
-                        )[0][:, -len(pair['output']):, :].view(-1, logits.size(-1)),  # Flatten logits
-                        torch.tensor(pair['output'], dtype=torch.int64).to(DEVICE).view(-1)  # Flatten targets
+                            torch.tensor(pair['input'] + pair['output'], dtype=torch.int64).unsqueeze(0).to(DEVICE)
+                        )[0][:, -len(pair['output']):, :].view(-1, logits.size(-1)),
+                        torch.tensor(pair['output'], dtype=torch.int64).to(DEVICE).view(-1)
                     ).item()
                     for pair in val_data
                 ) / len(val_data)
@@ -120,11 +129,12 @@ def finetune_model(model, optimizer, data, model_name, block_size):
                     f"[RUNTIME STATUS]: EPOCH: {epoch + 1}/{EPOCHS}, Pairs: {valid_pairs}, Val loss: {val_loss:.4f}, Time: {elapsed / 60:.2f}m"
                 )
 
-                # Save the model if the validation loss improves
+                # Save the model if validation loss improves
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
                     checkpoint_path = os.path.join(OUT_DIR, model_name, f"{model_name}_fine_tuned.pt")
                     torch.save(model.state_dict(), checkpoint_path)
+                    print(f"[RUNTIME STATUS]: Saved best model to {checkpoint_path}")
 
                 model.train()
 
@@ -134,10 +144,114 @@ def finetune_model(model, optimizer, data, model_name, block_size):
             )
 
     print("[RUNTIME STATUS]: Fine-tuning complete.")
-    if checkpoint_path:
-        print(f"[RUNTIME STATUS]: Best model saved to {checkpoint_path}")
-
     return checkpoint_path
+
+# def finetune_model(model, optimizer, data, model_name, block_size):
+#     """
+#     Fine-tune the model on the QA dataset using epochs.
+#     Args:
+#         model: The GPT model to be fine-tuned.
+#         optimizer: The optimizer for the model.
+#         data (dict): Dictionary containing 'train' and 'val' splits, each is a list of dictionaries, each dictionary is a pair.
+#         model_name (str): Name of the model for saving checkpoints.
+#         block_size (int): Maximum sequence length for input + output.
+#     """
+#     print("[RUNTIME STATUS]: Starting fine-tuning on QA data...")
+#     print(f"Model block_size: {model.config['block_size']}")
+#     start_time = time.time()
+#     best_val_loss = float('inf')
+#     checkpoint_path = None
+
+#     train_data = data['train']
+#     val_data = data['val']
+
+#     for epoch in range(EPOCHS):
+#         random.shuffle(train_data)  # Shuffle data at the start of each epoch
+#         valid_pairs = 0  # Track valid QA pairs processed in this epoch
+
+#         for pair in train_data:
+#             # Prepare input and output tensors
+#             input_tensor = torch.tensor(pair['input'], dtype=torch.int64).to(DEVICE)
+#             output_tensor = torch.tensor(pair['output'], dtype=torch.int64).to(DEVICE)
+#             print(f"input shape: {input_tensor.shape}, output shape: {output_tensor.shape}")
+
+#             # Combine input and output for full sequence
+#             full_sequence = torch.cat([input_tensor, output_tensor], dim=0)
+#             print(f"full_sequence shape: {full_sequence.shape}")
+#             if full_sequence.size(0) > block_size:
+#                 continue  # Skip sequences exceeding block_size
+
+#             # Pad the sequence to block_size
+#             pad_token = tokenizer.eot_token  # Ensure you define this correctly
+#             print(f"pad_token: {pad_token}")
+#             full_sequence = pad_to_block_size(full_sequence, block_size, pad_token).unsqueeze(0)  # Add batch dimension
+#             print(f"full_sequence shape after padding: {full_sequence.shape}")
+#             # Skip sequences that are too short after padding
+#             if full_sequence.shape[1] > block_size:
+#                 print("QA sequence is bigger than block size, continue")
+#                 continue
+#             else:
+#                 valid_pairs += 1
+
+#                 # Forward pass
+#                 optimizer.zero_grad()
+#                 logits, _ = model(full_sequence)
+#                 print(f"logits shape: {logits.shape}")
+
+#                 # Target tensor is full_sequence shifted by one token
+#                 target_tensor = full_sequence[:, 1:]  # Shift target by one token
+#                 logits = logits[:, :target_tensor.size(1), :]
+#                 print(f"Logits shape: {logits.shape}, Target tensor shape: {target_tensor.shape}")
+
+
+#                 # Compute loss
+#                 loss = F.cross_entropy(
+#                     logits.view(-1, logits.size(-1)),
+#                     target_tensor.view(-1),
+#                     ignore_index=pad_token  # Ignore the padding token in the loss
+#                 )
+
+#                 # Backward pass and optimization
+#                 loss.backward()
+#                 torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+#                 optimizer.step()
+
+#                 # Log every EVAL_ITERS
+#                 if valid_pairs % EVAL_ITERS == 0:
+#                     elapsed = time.time() - start_time
+#                     model.eval()
+#                     val_loss = sum(
+#                         F.cross_entropy(
+#                             model(
+#                                 torch.tensor(pair['input'] + pair['output'], dtype=torch.int64).unsqueeze(0).to(DEVICE)
+#                             )[0][:, -len(pair['output']):, :].view(-1, logits.size(-1)),
+#                             torch.tensor(pair['output'], dtype=torch.int64).to(DEVICE).view(-1)
+#                         ).item()
+#                         for pair in val_data
+#                     ) / len(val_data)
+
+#                     print(
+#                         f"[RUNTIME STATUS]: EPOCH: {epoch + 1}/{EPOCHS}, Pairs: {valid_pairs}, Val loss: {val_loss:.4f}, Time: {elapsed / 60:.2f}m"
+#                     )
+
+#                     # Save the model if the validation loss improves
+#                     if val_loss < best_val_loss:
+#                         best_val_loss = val_loss
+#                         checkpoint_path = os.path.join(OUT_DIR, model_name, f"{model_name}_fine_tuned.pt")
+#                         torch.save(model.state_dict(), checkpoint_path)
+
+#                     model.train()
+
+#         if valid_pairs == 0:
+#             raise ValueError(
+#                 f"[ERROR]: No valid QA pairs processed in epoch {epoch + 1}. Consider increasing block size or dataset size."
+#             )
+
+#     print("[RUNTIME STATUS]: Fine-tuning complete.")
+#     if checkpoint_path:
+#         print(f"[RUNTIME STATUS]: Best model saved to {checkpoint_path}")
+
+#     return checkpoint_path
 
 
 def generate_examples(model):
