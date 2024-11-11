@@ -7,7 +7,7 @@ warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.
 
 # Local code
 from data.data_load import encode
-from train_utils import (
+from utils import (
     DEVICE,
     load_configurations, get_model_choice, load_model
 )

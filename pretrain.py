@@ -9,7 +9,7 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.*weights_only=False.*")
 
 # Local code
-from train_utils import (
+from utils import (
     DEVICE, DEVICE_TYPE, DTYPE, CTX, DATA_DIR,
     initialize_model, load_configurations, get_model_choice, cpu_memory_usage, load_model
 )
