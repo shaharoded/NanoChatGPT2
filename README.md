@@ -24,7 +24,7 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-## Pre-Train the Model
+## Train the Model
 This part focuses on training the initial text generation model based on chosen .txt.
 
 ### 1. Load Train and Validation Data
