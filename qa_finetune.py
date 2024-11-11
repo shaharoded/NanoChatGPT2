@@ -2,6 +2,7 @@ import numpy as np
 import random
 import torch
 from torch.nn import functional as F
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 import os
 import time
 
@@ -138,6 +139,9 @@ def finetune_model(model, optimizer, data, model_config, out_dir, model_name):
     print(f"[RUNTIME INFO]: Best model will be saved as {ft_model_path}")
 
     block_size = model_config['block_size']
+    
+    # Initialize the learning rate scheduler
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
 
     for iter_num in range(MAX_ITERS):
         # Fetch a training batch
@@ -169,6 +173,9 @@ def finetune_model(model, optimizer, data, model_config, out_dir, model_name):
             ) / VALIDATION_SAMPLE_SIZE
 
             print(f"[RUNTIME STATUS]: Iter {iter_num}: train loss {train_loss:.3f}, val loss {val_loss:.3f}, time {(elapsed / 60):.1f}m")
+            
+            # Step the learning rate scheduler with the validation loss
+            scheduler.step(val_loss)
             
             # Save model checkpoint if validation loss improves
             if val_loss < best_val_loss:

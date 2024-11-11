@@ -52,7 +52,7 @@ NOTE: The tokenizer is hardcoded in this module and imported to other connected 
 
 ### 2. Train a Base Model Object
 The base GPT model is an nn.Module model structured in the file `gpt.py`. After creating the datasets, this model can be trained using the `pretrain.py` module, to create a language model capable of generating text based on learnt corpus. This is the base GPT model, later fineuned into an assistant.
-Using this process will create `out\{model_name}` directories with the model's best checkpoint. The best model will be saved under the name `{model_name}_base_model.pt`. This model will then be loaded to generate text as a POC. I would say a good goal would be to train nanoGPT model to `val loss < 4` which took me about 3 hours (on CPU).
+Using this process will create `out\{model_name}` directories with the model's best checkpoint. The best model will be saved under the name `{model_name}_base_model.pt`. This model will then be loaded to generate text as a POC. I would say a good goal would be to train nanoGPT model to `val loss < 4` which took me about 4 hours (on CPU).
 Use the following to run (mind the user prompts):
 
 ```bash

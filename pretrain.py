@@ -3,6 +3,7 @@ import time
 
 import numpy as np
 import torch
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.*weights_only=False.*")
@@ -16,7 +17,7 @@ from train_utils import (
 # Training parameters
 EVAL_INTERVAL = 25  # Number of iterations until validation
 VALIDATION_SAMPLE_SIZE = 100  # Number of batches for validation
-MAX_ITERS = 1000  # Total number of iterations
+MAX_ITERS = 2000  # Total number of iterations
 BATCH_SIZE = 8
 LEARNING_RATE = 2e-4
 WEIGHT_DECAY = 0.01
@@ -48,6 +49,9 @@ def train_model(model, optimizer, data, model_config, out_dir, model_name):
     best_val_loss = float('inf')
     base_model_path = os.path.join(out_dir, f"{model_name}_base_model.pt")
     print(f"[RUNTIME INFO]: Best model will be saved as {base_model_path}")
+    
+    # Add the scheduler (for learning rate decay)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
 
     for iter_num in range(MAX_ITERS):
         # Monitor CPU memory usage
@@ -73,6 +77,7 @@ def train_model(model, optimizer, data, model_config, out_dir, model_name):
             train_loss = sum(model(*get_batch(data, 'train', model_config))[1].item() for _ in range(VALIDATION_SAMPLE_SIZE)) / VALIDATION_SAMPLE_SIZE
             val_loss = sum(model(*get_batch(data, 'val', model_config))[1].item() for _ in range(VALIDATION_SAMPLE_SIZE)) / VALIDATION_SAMPLE_SIZE
             print(f"[RUNTIME STATUS]: Iter {iter_num}: train loss {train_loss:.3f}, val loss {val_loss:.3f}, time {(elapsed/60):.1f}m, Memory Usage: {mem_use}")
+            scheduler.step(val_loss)    # Step the scheduler with validation loss
             model.train()
 
             # Save model checkpoint, if validation loss decreased
