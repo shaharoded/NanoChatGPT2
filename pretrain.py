@@ -51,7 +51,7 @@ def train_model(model, optimizer, data, model_config, out_dir, model_name):
     print(f"[RUNTIME INFO]: Best model will be saved as {base_model_path}")
     
     # Add the scheduler (for learning rate decay)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
 
     for iter_num in range(MAX_ITERS):
         # Monitor CPU memory usage

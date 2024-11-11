@@ -29,7 +29,7 @@ FT_WEIGHT_DECAY = 0.005  # Different weight decay for fine-tuning
 FT_BETA1, FT_BETA2 = 0.9, 0.98
 GRAD_CLIP = 1.0
 
-MAX_ITERS = 1500
+MAX_ITERS = 2000
 BATCH_SIZE = 8
 VALIDATION_SAMPLE_SIZE = 100
 EVAL_INTERVAL = 25
@@ -141,7 +141,7 @@ def finetune_model(model, optimizer, data, model_config, out_dir, model_name):
     block_size = model_config['block_size']
     
     # Initialize the learning rate scheduler
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
 
     for iter_num in range(MAX_ITERS):
         # Fetch a training batch
