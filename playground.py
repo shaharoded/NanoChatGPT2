@@ -7,39 +7,14 @@ warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.
 
 # Local code
 from data.data_load import encode
-from pretrain import (
+from train_utils import (
     DEVICE,
     load_configurations, get_model_choice, initialize_model
 )
 
-print("Oi, welcome to the bloody Play Ground. Pick a trained model, and make it quick, ya wanker...")
 # Directory where base models are saved
 OUT_DIR = "out"
 CONFIG_PATH = 'model_config.json'
-
-# Load configurations and initialize model
-model_directories = [
-d for d in os.listdir(OUT_DIR)
-if os.path.isdir(os.path.join(OUT_DIR, d)) and
-any(f.endswith('fine_tuned.pt') for f in os.listdir(os.path.join(OUT_DIR, d)))
-]
-configs = load_configurations()
-
-# Filter configurations that match the model directories
-configs = {model_name: config for model_name, config in configs.items() if model_name in model_directories}
-if len(configs) == 0:
-    raise Exception("You got nothin', mate. No trained models at all. Bloody pathetic...")
-
-# Get model choice from the available configurations
-model_name, model_config = get_model_choice(configs)  # This returns model_name and model_config correctly
-
-# Initialize model (overrun OUT_DIR with relevant OUT_DIR)
-model, OUT_DIR = initialize_model(model_config, model_name)
-model_path = os.path.join(OUT_DIR, f'{model_name}_fine_tuned.pt')
-
-checkpoint = torch.load(model_path, map_location=DEVICE)
-model.load_state_dict(checkpoint)
-model.to(DEVICE)
 
 def generate_response(model, prompt):
     """
@@ -60,6 +35,31 @@ def generate_response(model, prompt):
     return answer
 
 if __name__ == "__main__":
+    print("Oi, welcome to the bloody Play Ground. Pick a trained model, and make it quick, ya wanker...")
+
+    # Load configurations and initialize model
+    model_directories = [
+    d for d in os.listdir(OUT_DIR)
+    if os.path.isdir(os.path.join(OUT_DIR, d)) and
+    any(f.endswith('fine_tuned.pt') for f in os.listdir(os.path.join(OUT_DIR, d)))
+    ]
+    configs = load_configurations()
+
+    # Filter configurations that match the model directories
+    configs = {model_name: config for model_name, config in configs.items() if model_name in model_directories}
+    if len(configs) == 0:
+        raise Exception("You got nothin', mate. No trained models at all. Bloody pathetic...")
+
+    # Get model choice from the available configurations
+    model_name, model_config = get_model_choice(configs)  # This returns model_name and model_config correctly
+
+    # Initialize model (overrun OUT_DIR with relevant OUT_DIR)
+    model, OUT_DIR = initialize_model(model_config, model_name)
+    model_path = os.path.join(OUT_DIR, f'{model_name}_fine_tuned.pt')
+
+    checkpoint = torch.load(model_path, map_location=DEVICE)
+    model.load_state_dict(checkpoint)
+    model.to(DEVICE)
     print("Oi, I'm listenin'. Ask your bloody question, or type 'quit' to sod off.")
     
     output_dir = os.path.join("data", f"{model_name}_feedback_data")
