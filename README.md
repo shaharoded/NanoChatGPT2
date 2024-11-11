@@ -61,10 +61,9 @@ python pretrain.py
 NOTE: This module defines `torch.manual_seed(1337)` meaning every random process is the consistent. This also causes the trained model to generate the same responses to re-used test cases, which might contradict the expectation for some randomness in the responses.
 
 ### 3. Finetune the Base Model to QA
-As described in step #1, we already loaded QA data for the finetune part. Now, this module focuses on taking this data and train the base model to the task of an assistant. Activate
-after the train is concluded, the model will generate response to a few hardcoded questions.
-This module handles the preprocess of the QA data streams and batches based on the model's chosen configurations (`block_size`).
-Finetuning the nanoGPT model with QA data of ~88MB on the current train configurations took me about [COMPLETE] hours (CPU).
+As outlined in step #1, the QA data has already been prepared for fine-tuning. This module trains the base model to adapt to generating responses to a wide range of questions. The data is preprocessed into streams and batches based on the model's block_size configuration.
+
+Fine-tuning the nanoGPT model on ~88MB of QA data with the current configurations took ~3 hours (CPU), achieving `val loss ~1.7`. While the model could generate responses, they were often incorrect, showcasing the limitations of a small architecture and limited data.
 
 Use the following to run (mind the user prompts):
 
