@@ -42,18 +42,18 @@ def get_model_choice(configs):
     return model_name, configs[model_name]
 
 
-def initialize_model(model_config, model_name, step='base_model', learning_rate=None, weight_decay=None, betas=None):
+def initialize_model(model_config, model_name, step='base_model', learning_rate=2e-4, weight_decay=0.01, betas=(0.9, 0.98)):
     """
-    Initialize the model, allowing you to continue training from a checkpoint or start from scratch.
+    Initialize the model for training purposes, allowing you to continue training from a checkpoint or start from scratch.
     If a checkpoint is found, the optimizer state is restored and updated with the provided parameters.
     
     Args:
         model_config (dict): From model_config.json
         model_name (str): The key from model_config, the model's architecture to train.
         step (str): Choose from 'base_model' or 'fine_tuned'.
-        learning_rate (float, optional): Learning rate for the optimizer. Defaults based on step.
-        weight_decay (float, optional): Weight decay for the optimizer. Defaults based on step.
-        betas (tuple, optional): (BETA1, BETA2) for the optimizer. Defaults based on step.
+        learning_rate (float, optional): Learning rate for the optimizer. Value based on step.
+        weight_decay (float, optional): Weight decay for the optimizer. Value based on step.
+        betas (tuple, optional): (BETA1, BETA2) for the optimizer. Value based on step.
     """
     out_dir = f'out/{model_name}'
     os.makedirs(out_dir, exist_ok=True)
@@ -88,3 +88,39 @@ def initialize_model(model_config, model_name, step='base_model', learning_rate=
     # Move model to the appropriate device
     model.to(DEVICE)
     return model, optimizer, out_dir
+
+
+def load_model(model_config, model_name, step='fine_tuned'):
+    """
+    Load a trained model for inference.
+    
+    Args:
+        model_config (dict): The configuration dictionary for the model.
+        model_name (str): The name of the model directory.
+        step (str): The training step to load ('fine_tuned' by default).
+    
+    Returns:
+        tuple: (model, out_dir)
+            - model: The loaded GPT model.
+            - out_dir: The directory where the model is stored.
+    """
+    out_dir = f'out/{model_name}'
+    os.makedirs(out_dir, exist_ok=True)
+
+    # Set the checkpoint path
+    checkpoint_path = os.path.join(out_dir, f"{model_name}_{step}.pt")
+
+    # Initialize the model
+    model = GPT(model_config)
+
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"[ERROR]: No checkpoint found at {checkpoint_path}. Cannot load the model.")
+
+    print(f"[INFO]: Loading model weights from {checkpoint_path}...")
+    checkpoint = torch.load(checkpoint_path, map_location=DEVICE)
+    model.load_state_dict(checkpoint['model_state_dict'])
+
+    # Move model to the appropriate device
+    model.to(DEVICE)
+    model.eval()  # Ensure model is in evaluation mode
+    return model, out_dir

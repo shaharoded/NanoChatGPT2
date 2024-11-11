@@ -9,7 +9,7 @@ warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.
 from data.data_load import encode
 from train_utils import (
     DEVICE,
-    load_configurations, get_model_choice, initialize_model
+    load_configurations, get_model_choice, load_model
 )
 
 # Directory where base models are saved
@@ -53,13 +53,15 @@ if __name__ == "__main__":
     # Get model choice from the available configurations
     model_name, model_config = get_model_choice(configs)  # This returns model_name and model_config correctly
 
-    # Initialize model (overrun OUT_DIR with relevant OUT_DIR)
-    model, OUT_DIR = initialize_model(model_config, model_name)
+    # Load model (overrun OUT_DIR with relevant OUT_DIR)
+    model, OUT_DIR = load_model(
+    model_config=model_config,
+    model_name=model_name,
+    step='fine_tuned'
+    )
+    
     model_path = os.path.join(OUT_DIR, f'{model_name}_fine_tuned.pt')
 
-    checkpoint = torch.load(model_path, map_location=DEVICE)
-    model.load_state_dict(checkpoint)
-    model.to(DEVICE)
     print("Oi, I'm listenin'. Ask your bloody question, or type 'quit' to sod off.")
     
     output_dir = os.path.join("data", f"{model_name}_feedback_data")

@@ -14,7 +14,7 @@ from data.data_load import encode, TOKENIZER
 
 from train_utils import (
     DEVICE, DTYPE, CTX, DATA_DIR,
-    initialize_model, load_configurations, get_model_choice
+    initialize_model, load_configurations, get_model_choice, load_model
 )
 
 # Directory where base models are saved
@@ -205,7 +205,6 @@ def generate_examples(model):
     ]
 
     print("\n[TEXT GENERATION EXAMPLES]:")
-    model.eval()  # Ensure model is in evaluation mode
     for question in questions:
         input_tokens = encode(question)
         input_tensor = torch.tensor(input_tokens, dtype=torch.int64).unsqueeze(0).to(DEVICE)
@@ -273,9 +272,11 @@ def main():
     # Load the best model and generate examples
     if checkpoint_path:
         print(f"[RUNTIME STATUS]: Loading best model from {checkpoint_path}")
-        checkpoint = torch.load(checkpoint_path, map_location=DEVICE)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        model.to(DEVICE)
+        model, _ = load_model(
+            model_config=model_config,
+            model_name=model_name,
+            step='fine_tuned'
+        )
 
         print("[RUNTIME INFO]: Generating example outputs...")
         generate_examples(model)

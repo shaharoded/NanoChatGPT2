@@ -11,7 +11,7 @@ warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.
 # Local code
 from train_utils import (
     DEVICE, DEVICE_TYPE, DTYPE, CTX, DATA_DIR,
-    initialize_model, load_configurations, get_model_choice, cpu_memory_usage
+    initialize_model, load_configurations, get_model_choice, cpu_memory_usage, load_model
 )
 
 # Training parameters
@@ -135,10 +135,18 @@ def main():
     print(f"[TRAINING INFO]: Estimated number of epochs: {total_epochs:.2f}")
     
     # Train model
-    base_model_path = train_model(model, optimizer, data, model_config, out_dir, model_name)
+    train_model(model, optimizer, data, model_config, out_dir, model_name)
 
     # Load best model and generate text
-    load_best_model(model, optimizer, base_model_path)
+    model, _ = load_model(
+            model_config=model_config,
+            model_name=model_name,
+            step='base_model'
+        )
+    # Generating text from the best model
+    decoded_text = model.generate_text(context=None, max_new_tokens=200, device=DEVICE)
+    print("\nGenerated Text:\n")
+    print(decoded_text)
 
 
 if __name__ == "__main__":
