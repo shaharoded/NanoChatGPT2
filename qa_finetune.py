@@ -29,7 +29,7 @@ FT_WEIGHT_DECAY = 0.005  # Different weight decay for fine-tuning
 FT_BETA1, FT_BETA2 = 0.9, 0.98
 GRAD_CLIP = 1.0
 
-MAX_ITERS = 2000
+MAX_ITERS = 10000   # Given ~80K pairs, MAX_ITERS*BATCH_SIZE ~ 1 Epoch
 BATCH_SIZE = 8
 VALIDATION_SAMPLE_SIZE = 100
 EVAL_INTERVAL = 25
@@ -37,8 +37,8 @@ EVAL_INTERVAL = 25
 
 def load_qa_data():
     # Load training and validation data
-    train_data = np.memmap(os.path.join(DATA_DIR, 'qa_train.bin'), dtype=np.uint16, mode='r')
-    val_data = np.memmap(os.path.join(DATA_DIR, 'qa_val.bin'), dtype=np.uint16, mode='r')
+    train_data = np.memmap(os.path.join(DATA_DIR, 'qa_train.bin'), dtype=np.int32, mode='r')
+    val_data = np.memmap(os.path.join(DATA_DIR, 'qa_val.bin'), dtype=np.int32, mode='r')
     return train_data, val_data
 
 def filter_and_trim_qa_stream(data_stream, block_size):
@@ -50,24 +50,26 @@ def filter_and_trim_qa_stream(data_stream, block_size):
         block_size (int): Maximum sequence length for a model input.
     
     Returns:
-        tuple: A filtered and trimmed tokenized stream and valid start indices.
+        tuple: A filtered and trimmed tokenized stream and valid start indices in the filtered stream.
     
     Raises:
         ValueError: If the number of valid QA pairs is less than VALIDATION_SAMPLE_SIZE.
     """
     filtered_stream = []
     valid_indices = []
-    current_start = 0
+    current_start = 0  # Start index in the original data_stream
+    filtered_start = 0  # Start index in the filtered_stream
     valid_pairs_count = 0
 
     for i, token in enumerate(data_stream):
         if token == TOKENIZER.eot_token:
-            length = i - current_start + 1  # Include the <EOT> token
+            length = i - current_start + 1  # Include the <EOT> token (end of Q-A)
             if length <= block_size:
                 # Include valid QA pair in the filtered stream
                 filtered_stream.extend(data_stream[current_start:i + 1])
-                valid_indices.append(current_start)
+                valid_indices.append(filtered_start)
                 valid_pairs_count += 1
+                filtered_start += length  # Update the start index for the filtered_stream
             # Move to the next QA pair
             current_start = i + 1
 
@@ -139,14 +141,16 @@ def finetune_model(model, optimizer, data, model_config, out_dir, model_name):
     print(f"[RUNTIME INFO]: Best model will be saved as {ft_model_path}")
 
     block_size = model_config['block_size']
+    n_processed_qa = 0
     
     # Initialize the learning rate scheduler
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
-
+    print(data['train']['stream'])
     for iter_num in range(MAX_ITERS):
         # Fetch a training batch
         X, Y = get_batch(data['train']['stream'], data['train']['indices'], block_size)
-
+        print(X)
+        print(Y)
         # Forward, backward, and update
         with CTX:
             logits, loss = model(X, Y)
@@ -156,6 +160,7 @@ def finetune_model(model, optimizer, data, model_config, out_dir, model_name):
         torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
         scaler.step(optimizer)
         scaler.update()
+        n_processed_qa += BATCH_SIZE
 
         # Logging and validation
         if iter_num % EVAL_INTERVAL == 0:
@@ -172,7 +177,7 @@ def finetune_model(model, optimizer, data, model_config, out_dir, model_name):
                 for _ in range(VALIDATION_SAMPLE_SIZE)
             ) / VALIDATION_SAMPLE_SIZE
 
-            print(f"[RUNTIME STATUS]: Iter {iter_num}: train loss {train_loss:.3f}, val loss {val_loss:.3f}, time {(elapsed / 60):.1f}m")
+            print(f"[RUNTIME STATUS]: Iter {iter_num}, {n_processed_qa} processed QAs: train loss {train_loss:.3f}, val loss {val_loss:.3f}, time {(elapsed / 60):.1f}m")
             
             # Step the learning rate scheduler with the validation loss
             scheduler.step(val_loss)

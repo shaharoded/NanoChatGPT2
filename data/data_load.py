@@ -193,8 +193,8 @@ if __name__ == "__main__":
     # Export train and validation to bin files
     train_ids = np.array(train_ids, dtype=np.uint16)
     val_ids = np.array(val_ids, dtype=np.uint16)
-    train_ids.tofile(os.path.join(os.path.dirname(__file__), 'pretrain_train.bin'))
-    val_ids.tofile(os.path.join(os.path.dirname(__file__), 'pretrain_val.bin'))
+    train_ids.astype(np.int32).tofile(os.path.join(os.path.dirname(__file__), 'pretrain_train.bin'))
+    val_ids.astype(np.int32).tofile(os.path.join(os.path.dirname(__file__), 'pretrain_val.bin'))
     
     # Preprocess QA Data
     qa_options = config["qa_data"]
@@ -229,8 +229,8 @@ if __name__ == "__main__":
     print(f"[RUNTIME INFO]: Validation stream starts with '{decode([qa_val_stream[0]])}' (should not be <EOT>)")
 
     # Save tokenized streams
-    qa_train_stream.tofile(os.path.join(os.path.dirname(__file__), 'qa_train.bin'))
-    qa_val_stream.tofile(os.path.join(os.path.dirname(__file__), 'qa_val.bin'))
+    qa_train_stream.astype(np.int32).tofile(os.path.join(os.path.dirname(__file__), 'qa_train.bin'))
+    qa_val_stream.astype(np.int32).tofile(os.path.join(os.path.dirname(__file__), 'qa_val.bin'))
 
     # Debug information
     print(f"[RUNTIME INFO]: QA train data saved with {len(qa_train_stream):,} tokens")

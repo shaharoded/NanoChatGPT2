@@ -26,8 +26,8 @@ GRAD_CLIP = 1.0
 
 def load_data():
     # Load training and validation data
-    train_data = np.memmap(os.path.join(DATA_DIR, 'pretrain_train.bin'), dtype=np.uint16, mode='r')
-    val_data = np.memmap(os.path.join(DATA_DIR, 'pretrain_val.bin'), dtype=np.uint16, mode='r')
+    train_data = np.memmap(os.path.join(DATA_DIR, 'pretrain_train.bin'), dtype=np.int32, mode='r')
+    val_data = np.memmap(os.path.join(DATA_DIR, 'pretrain_val.bin'), dtype=np.int32, mode='r')
     return train_data, val_data
 
 
