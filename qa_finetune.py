@@ -145,12 +145,11 @@ def finetune_model(model, optimizer, data, model_config, out_dir, model_name):
     
     # Initialize the learning rate scheduler
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
-    print(data['train']['stream'])
+
     for iter_num in range(MAX_ITERS):
         # Fetch a training batch
         X, Y = get_batch(data['train']['stream'], data['train']['indices'], block_size)
-        print(X)
-        print(Y)
+
         # Forward, backward, and update
         with CTX:
             logits, loss = model(X, Y)
