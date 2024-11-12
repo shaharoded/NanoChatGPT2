@@ -162,7 +162,7 @@ def finetune_model(model, optimizer, data, model_config, out_dir, model_name):
         n_processed_qa += BATCH_SIZE
 
         # Logging and validation
-        if iter_num % EVAL_INTERVAL == 0:
+        if (iter_num + 1) % EVAL_INTERVAL == 0:
             elapsed = time.time() - start_time
             model.eval()
 
@@ -176,7 +176,7 @@ def finetune_model(model, optimizer, data, model_config, out_dir, model_name):
                 for _ in range(VALIDATION_SAMPLE_SIZE)
             ) / VALIDATION_SAMPLE_SIZE
 
-            print(f"[RUNTIME STATUS]: Iter {iter_num}, {n_processed_qa} processed QAs: train loss {train_loss:.3f}, val loss {val_loss:.3f}, time {(elapsed / 60):.1f}m")
+            print(f"[RUNTIME STATUS]: Iter {iter_num + 1}, {n_processed_qa} processed QAs: train loss {train_loss:.3f}, val loss {val_loss:.3f}, time {(elapsed / 60):.1f}m")
             
             # Step the learning rate scheduler with the validation loss
             scheduler.step(val_loss)

@@ -71,12 +71,12 @@ def train_model(model, optimizer, data, model_config, out_dir, model_name):
         scaler.update()
 
         # Logging and evaluation
-        if iter_num % EVAL_INTERVAL == 0:
+        if (iter_num + 1) % EVAL_INTERVAL == 0:
             elapsed = time.time() - start_time
             model.eval()
             train_loss = sum(model(*get_batch(data, 'train', model_config))[1].item() for _ in range(VALIDATION_SAMPLE_SIZE)) / VALIDATION_SAMPLE_SIZE
             val_loss = sum(model(*get_batch(data, 'val', model_config))[1].item() for _ in range(VALIDATION_SAMPLE_SIZE)) / VALIDATION_SAMPLE_SIZE
-            print(f"[RUNTIME STATUS]: Iter {iter_num}: train loss {train_loss:.3f}, val loss {val_loss:.3f}, time {(elapsed/60):.1f}m, Memory Usage: {mem_use}")
+            print(f"[RUNTIME STATUS]: Iter {iter_num + 1}: train loss {train_loss:.3f}, val loss {val_loss:.3f}, time {(elapsed/60):.1f}m, Memory Usage: {mem_use}")
             scheduler.step(val_loss)    # Step the scheduler with validation loss
             model.train()
 
