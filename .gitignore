@@ -2,7 +2,7 @@
 data/pretrain_input.txt
 data/pretrain_train.bin
 data/pretrain_val.bin
-data/qa_input.json
+data/qa_input.txt
 data/qa_train.bin
 data/qa_val.bin
 

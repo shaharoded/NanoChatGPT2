@@ -23,7 +23,7 @@ def decode(token_ids):
     """Decode a list of token IDs back into a string using GPT-2 BPE."""
     return TOKENIZER.decode(token_ids)
 
-def download_data(url, output_file_name):
+def download_data(url, output_file_name=None):
     """
     Download a file from a given URL. 
     The file is either a .txt file or .txt.gz file, so extraction will be performed if needed.
@@ -31,7 +31,7 @@ def download_data(url, output_file_name):
     Return the concatenated text as str.
     Args:
         url (str): The URL to download from.
-        output_file_name (str): The name to save the downloaded (extracted if needed) txt or json file in.
+        output_file_name (str): The name to save the downloaded (extracted if needed) txt or json file in. Default to None, in which case no file is saved.
     Returns:
         str: Concatenated text from the downloaded or extracted files.
     """        
@@ -39,7 +39,8 @@ def download_data(url, output_file_name):
     output_dir = os.path.dirname(__file__)
     original_file_name = url.split('/')[-1]
     original_file_path = os.path.join(output_dir, original_file_name)
-    saved_file_path = os.path.join(output_dir, output_file_name)
+    if output_file_name:
+        saved_file_path = os.path.join(output_dir, output_file_name)
 
     # Download the file
     print(f"[RUNTIME STATUS]: Downloading data from {url}...")
@@ -55,8 +56,9 @@ def download_data(url, output_file_name):
             extracted_text = f.read()
         
         # Save the extracted text to saved_file_path
-        with open(saved_file_path, "w", encoding="utf-8") as f:
-            f.write(extracted_text)
+        if output_file_name:
+            with open(saved_file_path, "w", encoding="utf-8") as f:
+                f.write(extracted_text)
         
         os.remove(original_file_path)  # Remove the gz file after extraction
         return extracted_text
@@ -68,8 +70,9 @@ def download_data(url, output_file_name):
             content = f.read()
         
         # Save the content to saved_file_path
-        with open(saved_file_path, "w", encoding="utf-8") as f:
-            f.write(content)
+        if output_file_name:
+            with open(saved_file_path, "w", encoding="utf-8") as f:
+                f.write(content)
         
         os.remove(original_file_path)  # Remove the original file after saving
         return content
@@ -81,8 +84,9 @@ def download_data(url, output_file_name):
             content = json.load(f)
         
         # Save the content to saved_file_path in a pretty JSON format
-        with open(saved_file_path, "w", encoding="utf-8") as f:
-            json.dump(content, f, ensure_ascii=False, indent=4)
+        if output_file_name:
+            with open(saved_file_path, "w", encoding="utf-8") as f:
+                json.dump(content, f, ensure_ascii=False, indent=4)
         
         os.remove(original_file_path)  # Remove the original file after saving
         return json.dumps(content, ensure_ascii=False, indent=4)  # Return the JSON content as a formatted JSON string
@@ -90,7 +94,7 @@ def download_data(url, output_file_name):
         raise ValueError(f'Unrecognized file type found, the original file downloaded is: {original_file_name}')
     
 # Function to preprocess Q&A data
-def preprocess_qa_data(data_str, add_context=False, eot_token_id=None):
+def preprocess_qa_data(data_str, add_context=False, output_file_name='qa_input.txt'):
     """
     Preprocess Q&A data from a JSON file and return a continuous stream of tokenized text,
     while also printing statistics on input and output lengths for QA pairs.
@@ -103,12 +107,13 @@ def preprocess_qa_data(data_str, add_context=False, eot_token_id=None):
     Returns:
         np.array: A continuous stream of token IDs for all QA pairs, concatenated with <EOT>.
     """
+    # set path to save .txt
+    output_dir = os.path.dirname(__file__)    
     data = json.loads(data_str)
     tokenized_stream = []
     input_lengths = []  # Track lengths for statistics
-    output_lengths = []  # Track lengths for statistics
 
-    eot_token_id = eot_token_id or TOKENIZER.eot_token  # Use provided EOT token ID or default
+    eot_token_id = TOKENIZER.eot_token
 
     for article in data['data']:
         for paragraph in article['paragraphs']:
@@ -119,28 +124,36 @@ def preprocess_qa_data(data_str, add_context=False, eot_token_id=None):
                     question += "?"  # Ensure question ends with a "?"
 
                 for answer in qa['answers']:
-                    answer_text = answer['text']
+                    answer = answer['text']
+                    
+                    # Mild formatting for answers
+                    if answer.endswith('!'):
+                        answer = answer[:-1] + '.'
+                    elif not answer.endswith('.'):
+                        answer += '.' 
                     
                     # Handle context
                     input_text = f"{context}\n{question}" if add_context else f"{question}"
-                    output_text = f"{answer_text}"
-
-                    # Encode input and output
-                    input_encoded = encode(input_text, end_token=False)
-                    output_encoded = encode(output_text, end_token=False)
+                    output_text = f"{answer[:1].upper()}{answer[1:]}" # Properly formatting answer's as sentences
+                    text_qa = input_text + ' ' + output_text + ' '
 
                     # Concatenate QA pair with EOT token
-                    tokenized_qa = input_encoded + output_encoded + [eot_token_id]
+                    tokenized_qa = encode(text_qa, end_token=False) + [eot_token_id]
                     tokenized_stream.extend(tokenized_qa)
 
                     # Update length stats
-                    input_lengths.append(len(input_encoded))
-                    output_lengths.append(len(output_encoded))
+                    input_lengths.append(len(tokenized_qa))
 
     # Print statistics
-    print(f"[DATA STATS]: Input Lengths -> Min: {min(input_lengths)}, Max: {max(input_lengths)}, Avg: {sum(input_lengths) / len(input_lengths):.2f}")
-    print(f"[DATA STATS]: Output Lengths -> Min: {min(output_lengths)}, Max: {max(output_lengths)}, Avg: {sum(output_lengths) / len(output_lengths):.2f}")
-
+    print(f"[DATA STATS]: Input Lengths (tokens) -> Min: {min(input_lengths)}, Max: {max(input_lengths)}, Avg: {sum(input_lengths) / len(input_lengths):.2f}")
+    
+    # Save qa text in folder 
+    if output_file_name:
+        text_stream = decode(tokenized_stream)
+        saved_file_path = os.path.join(output_dir, output_file_name)
+        with open(saved_file_path, "w", encoding="utf-8") as f:
+                f.write(text_stream)
+        
     return np.array(tokenized_stream, dtype=np.int64)
 
 # Code to preprocess the data, Will only run if the module is called directly
@@ -172,8 +185,8 @@ if __name__ == "__main__":
     val_data = pretrain_extracted_text[int(n*0.9):]
 
     # Encode train and validation data
-    train_ids = encode(train_data)
-    val_ids = encode(val_data)
+    train_ids = encode(train_data, end_token=False)
+    val_ids = encode(val_data, end_token=False)
     print(f"[RUNTIME INFO]: Pretrain train has {len(train_ids):,} tokens")
     print(f"[RUNTIME INFO]: Pretrain val has {len(val_ids):,} tokens")
 
@@ -194,7 +207,7 @@ if __name__ == "__main__":
     selected_qa_url = qa_options[selected_qa_name]
 
     # Download QA data and turn to tokenized stream
-    qa_input_path = os.path.join(os.path.dirname(__file__), 'qa_input.json')
+    qa_input_path = os.path.join(os.path.dirname(__file__))
     qa_extracted_dict = download_data(selected_qa_url, qa_input_path)
     qa_tokenized_stream = preprocess_qa_data(qa_extracted_dict)
     
@@ -202,17 +215,18 @@ if __name__ == "__main__":
     split_index = int(len(qa_tokenized_stream) * 0.9)
 
     # Find the last <EOT> token in the training split
-    eot_token_id = TOKENIZER.eot_token  # Ensure this is correctly set for the used tokenizer
-    while split_index < len(qa_tokenized_stream) and qa_tokenized_stream[split_index] != eot_token_id:
+    while split_index < len(qa_tokenized_stream) and qa_tokenized_stream[split_index] != TOKENIZER.eot_token:
         split_index += 1
 
     # Include the <EOT> token in the training set and start validation after it
     qa_train_stream = qa_tokenized_stream[:split_index + 1]
     qa_val_stream = qa_tokenized_stream[split_index + 1:]
 
+    print(f"[RUNTIME INFO]: <EOT> text in this tokenizer: {decode([TOKENIZER.eot_token])}")
+    print(f"[RUNTIME INFO]: Data stream length is {len(qa_tokenized_stream)} tokens")
     print(f"[RUNTIME INFO]: Adjusted split point at token {split_index} to align with <EOT>")
-    print(f"[RUNTIME INFO]: Train stream ends with {qa_train_stream[-1]} (should be <EOT>)")
-    print(f"[RUNTIME INFO]: Validation stream starts with {qa_val_stream[0]} (should not be <EOT>)")
+    print(f"[RUNTIME INFO]: Train stream ends with '{decode([qa_train_stream[-1]])}' (should be <EOT>)")
+    print(f"[RUNTIME INFO]: Validation stream starts with '{decode([qa_val_stream[0]])}' (should not be <EOT>)")
 
     # Save tokenized streams
     qa_train_stream.tofile(os.path.join(os.path.dirname(__file__), 'qa_train.bin'))
