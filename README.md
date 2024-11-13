@@ -63,7 +63,7 @@ NOTE: This module defines `torch.manual_seed(1337)` meaning every random process
 ### 3. Finetune the Base Model to QA
 As outlined in step #1, the QA data has already been prepared for fine-tuning. This module trains the base model to adapt to generating responses to a wide range of questions. The data is preprocessed into streams and batches based on the model's block_size configuration.
 
-Fine-tuning the nanoGPT model on ~88MB of QA data with the current configurations took ~ [COMPLETE] hours (CPU), achieving `val loss ~ [COMPLETE]`. While the model could generate responses, they were often incorrect, showcasing the limitations of a small architecture and limited data.
+Fine-tuning the nanoGPT model on ~88MB of QA data with the current configurations took ~ 4 hours (CPU), achieving `val loss ~ 5.8` on the QA data. While the model could generate responses, they were incorrect, showcasing the limitations of a small architecture and limited data.
 
 Use the following to run (mind the user prompts):
 

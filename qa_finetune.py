@@ -29,7 +29,7 @@ FT_WEIGHT_DECAY = 0.005  # Different weight decay for fine-tuning
 FT_BETA1, FT_BETA2 = 0.9, 0.98
 GRAD_CLIP = 1.0
 
-MAX_ITERS = 10000   # Given ~80K pairs, MAX_ITERS*BATCH_SIZE ~ 1 Epoch
+MAX_ITERS = 2000   # Given ~80K pairs, MAX_ITERS*BATCH_SIZE ~ 0.2 Epoch
 BATCH_SIZE = 8
 VALIDATION_SAMPLE_SIZE = 100
 EVAL_INTERVAL = 25
