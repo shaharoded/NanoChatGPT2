@@ -8,7 +8,7 @@ import gzip
 # Initialize the tiktoken encoding object
 TOKENIZER = tiktoken.get_encoding("gpt2")
 ANSWER_TOKEN = "<|answer|>"
-answer_token_id = TOKENIZER.encode(ANSWER_TOKEN)[0]  # Get ID for "<|answer|>"
+
 
 # Tokenization functions
 def encode(text, end_token=False):
