@@ -1,7 +1,7 @@
 # Training a Nano Version of ChatGPT2
 This project aims to train a language model from scratch, making it as functional and user-friendly as possible. It is an adaptation of `https://github.com/karpathy/nanoGPT/tree/master` with a focus on simplifying the process and adding basic "instruction-following" capabilities to the model.
 
-DISCLAIMER - This is a reduced architecture on small datasets allowing training on CPU. This means the model performances will be pretty lousy. Bigger datasets (base + QA) on bigger architecture (as suggested in `model_config.json`) will significantly improve the model's quality.
+DISCLAIMER - This is a reduced architecture on small datasets allowing training on CPU. It allowes you to mimic the training and finetuning process of a GPT2 style model, but in reality, the `NanoGPT` architecture (expecially `block_size`) does not allow enough context to properly include the full QA stream. This means the model performances will be pretty lousy. Bigger datasets (base + QA) on bigger architecture (as suggested in `model_config.json`) will significantly improve the model's quality. With that being said, on the simple task of language modeling the small models are doing quite fine.
 
 ## Getting Started
 1. Clone this repository. Run the following command:
@@ -61,9 +61,11 @@ python pretrain.py
 NOTE: This module defines `torch.manual_seed(1337)` meaning every random process is the consistent. This also causes the trained model to generate the same responses to re-used test cases, which might contradict the expectation for some randomness in the responses.
 
 ### 3. Finetune the Base Model to QA
-As outlined in step #1, the QA data has already been prepared for fine-tuning. This module trains the base model to adapt to generating responses to a wide range of questions. The data is preprocessed into streams and batches based on the model's block_size configuration.
+As outlined in step #1, the QA data has already been prepared for fine-tuning. This module trains the base model to adapt to generating responses to a wide range of questions. The data is preprocessed into streams and batches based on the model's `block_size` configuration.
 
-Fine-tuning the nanoGPT model on ~88MB of QA data with the current configurations took ~ 4 hours (CPU), achieving `val loss ~ 5.8` on the QA data. While the model could generate responses, they were incorrect, showcasing the limitations of a small architecture and limited data.
+Fine-tuning the nanoGPT model on ~88MB of QA data with the current configurations took ~ 4 hours (CPU), achieving `val loss ~ 5.8` on the QA data. While the model could generate responses, they were incorrect, showcasing the limitations of a small architecture and limited data. This training loop was done without the context of every QA, due to small `block_size`, which also reduced the model's abillity to handle the task.
+
+With that being said, the designed training flow is based on SOTA flows for QA finetuning of Decoder Only models, and I expect it to work much better on larder architectures.
 
 Use the following to run (mind the user prompts):
 
@@ -72,7 +74,7 @@ python qa_finetune.py
 ```
 
 ### 4. Reinforcement Learning from Human Feedback (RLHF)
-The final stage of training a conversational bot like this typically involves Reinforcement Learning from Human Feedback (RLHF). This stage helps align the model's behavior with human preferences, such as being more helpful, accurate, or less biased.
+The final stage of training a conversational bot like this typically involves Reinforcement Learning from Human Feedback (RLHF). This stage helps align the model's behavior with human preferences, such as being more helpful, accurate, or less biased. On the QA task, this stage will take (for example) 2 generated answers from the model, and will rank them as better / worse, which allowes for another tuning to be performed.
 
 Currently, due to limitations in resources and time (lack of tagged responses and a reinforcement mechanism for feedback), this step is not implemented. However, feel free to extend the project and experiment with RLHF.
 
@@ -96,7 +98,7 @@ To commit and push all changes to the repository follow these steps:
     git add .
     git commit -m "Reasons for disrupting GIT (commit message)"
     git branch -M main
-    git push -u origin main / git push -f origin main   # If you want to force push
+    git push -u origin main
     ```
 
     *Note: Replace `main` with your branch name if you're not using the `main` branch.*

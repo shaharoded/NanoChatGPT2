@@ -95,11 +95,11 @@ class GPT(nn.Module):
         self.config = config
 
         self.transformer = nn.ModuleDict({
-            "wte": nn.Embedding(config["vocab_size"], config["n_embd"]),
-            "wpe": nn.Embedding(config["block_size"], config["n_embd"]),
+            "wte": nn.Embedding(config["vocab_size"], config["n_embd"]), # Token embedding layer, text -> embedding vector
+            "wpe": nn.Embedding(config["block_size"], config["n_embd"]), # Positional embedding layer, position -> embedding vector
             "drop": nn.Dropout(config["dropout"]),
-            "h": nn.ModuleList([Block(config) for _ in range(config["n_layer"])]),
-            "ln_f": LayerNorm(config["n_embd"], bias=config["bias"]),
+            "h": nn.ModuleList([Block(config) for _ in range(config["n_layer"])]), # Transformer blocks
+            "ln_f": LayerNorm(config["n_embd"], bias=config["bias"]), # Final layer normalization
         })
         self.lm_head = nn.Linear(config["n_embd"], config["vocab_size"], bias=False)
 

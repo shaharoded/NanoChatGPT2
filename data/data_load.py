@@ -133,9 +133,9 @@ def preprocess_qa_data(data_str, add_context=False, output_file_name='qa_input.t
                         answer += '.' 
                     
                     # Handle context
-                    input_text = f"{context}\n{question}" if add_context else f"{question}"
-                    output_text = f"{answer[:1].upper()}{answer[1:]}" # Properly formatting answer's as sentences
-                    text_qa = input_text + ' ' + output_text + ' '
+                    input_text = f"""QUESTION: {question}\nContext: {context}\nAnswer: """ if add_context else f"QUESTION: {question}\nAnswer: "
+                    output_text = f"{answer[:1].upper()}{answer[1:]}" # Properly formatting answer's as sentences (capital first letter)
+                    text_qa = input_text + output_text
 
                     # Concatenate QA pair with EOT token
                     tokenized_qa = encode(text_qa, end_token=False) + [eot_token_id]
