@@ -10,7 +10,7 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.*weights_only=False.*")
 
 # Local code
-from data.data_load import encode, TOKENIZER
+from data.data_load import encode, TOKENIZER, ANSWER_TOKEN
 
 from utils import (
     DEVICE, DTYPE, CTX, DATA_DIR,
@@ -90,6 +90,24 @@ def pad_to_block_size(tensor, block_size, pad_token=TOKENIZER.eot_token):
         tensor = F.pad(tensor, (0, padding), value=pad_token)
     return tensor
 
+def mask_target_to_only_answer(input_tensor, target_tensor, answer_token_id):
+    """
+    This function masks the target tensor to only include the answer token, 
+    so that the finetuning frocess will focus solely on the answer the model should give, and not on generating the rest of the sequence.
+    """
+    # input_tensor, target_tensor: (batch_size, seq_len)
+    for i in range(input_tensor.size(0)):  # Loop over batch
+        sequence = input_tensor[i]
+        target = target_tensor[i]
+
+        matches = (sequence == answer_token_id).nonzero(as_tuple=True)
+        if len(matches[0]) == 0:
+            raise ValueError(f"[ERROR]: Answer token not found in sequence {i}")
+        
+        answer_start = matches[0].item()  # First occurrence
+        # Mask all targets *before* the answer_start
+        target[:answer_start + 1] = -1  # also mask the <|answer|> itself
+    return target_tensor
 
 def get_batch(data_stream, valid_indices, block_size):
     """
@@ -112,11 +130,16 @@ def get_batch(data_stream, valid_indices, block_size):
         end_idx = min(start_idx + block_size, len(data_stream))
         sequence = data_stream[start_idx:end_idx]
         sequence = pad_to_block_size(torch.tensor(sequence, dtype=torch.int64), block_size)
-        input_batch.append(sequence[:-1])  # Input (all but the last token)
-        target_batch.append(sequence[1:])  # Target (all but the first token)
+        input_batch.append(sequence[:-1]) # Input (all but the last token)
+        target_batch.append(sequence[1:]) # Target (all but the first token)
 
     input_tensor = torch.stack(input_batch).to(DEVICE)
     target_tensor = torch.stack(target_batch).to(DEVICE)
+
+    # Mask non-answer parts in the target tensor
+    answer_token_id = TOKENIZER.encode(ANSWER_TOKEN)[0]  # Get ID for "<|answer|>" 
+    target_tensor = mask_target_to_only_answer(input_tensor, target_tensor, answer_token_id)
+
     return input_tensor, target_tensor
 
 

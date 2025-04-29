@@ -4,7 +4,7 @@ from torch.nn import functional as F
 import math
 
 # Local Code
-from data.data_load import TOKENIZER, encode, decode
+from data.data_load import TOKENIZER, encode, decode, ANSWER_TOKEN
 
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
@@ -238,4 +238,15 @@ class GPT(nn.Module):
             # If already a tensor, move to the correct device
             context = context.to(device)
         generated_tokens = self.generate(context, max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k)[0].tolist()
-        return decode(generated_tokens)
+        full_text = decode(generated_tokens)
+
+        # Small trick to generate just answers to QA, in case the model was already tuned for it
+        # Remove everything before and including <|answer|> token
+        answer_token_text = ANSWER_TOKEN
+        if answer_token_text in full_text:
+            answer_start_idx = full_text.index(answer_token_text) + len(answer_token_text)
+            answer_only = full_text[answer_start_idx:].lstrip()  # Remove leading spaces
+        else:
+            answer_only = full_text  # fallback: if <|answer|> not found
+
+        return answer_only

@@ -7,6 +7,8 @@ import gzip
 
 # Initialize the tiktoken encoding object
 TOKENIZER = tiktoken.get_encoding("gpt2")
+ANSWER_TOKEN = "<|answer|>"
+answer_token_id = TOKENIZER.encode(ANSWER_TOKEN)[0]  # Get ID for "<|answer|>"
 
 # Tokenization functions
 def encode(text, end_token=False):
@@ -134,7 +136,7 @@ def preprocess_qa_data(data_str, add_context=False, output_file_name='qa_input.t
                     
                     # Handle context
                     input_text = f"""QUESTION: {question}\nContext: {context}\nAnswer: """ if add_context else f"QUESTION: {question}\nAnswer: "
-                    output_text = f"{answer[:1].upper()}{answer[1:]}" # Properly formatting answer's as sentences (capital first letter)
+                    output_text = ANSWER_TOKEN + " " + f"{answer[:1].upper()}{answer[1:]}" # Properly formatting answer's as sentences (capital first letter)
                     text_qa = input_text + output_text
 
                     # Concatenate QA pair with EOT token
